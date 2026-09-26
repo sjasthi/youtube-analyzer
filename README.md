@@ -1,5 +1,23 @@
 # ICS 499 - YouTube Analyzer
 
+## What's new this version
+
+- Add analytics
+- Use UC id to look up creators (Soon to be updated to use URLs and @handle)
+- Able to pull at most 50 videos at once
+- Shows creator total subscribers, total videos created, views, and posting trends
+- Average views
+- Average likes
+- Average comments
+- Average video duration
+- Total views across the retrieved sample
+- Engagement rate
+- Average days between uploads
+- Estimated uploads per month
+- Most viewed video in the sample
+- Most liked video in the sample
+- Upload count by month
+
 ## Authors
 - Ashley Zenzola
 - Chee Vang
