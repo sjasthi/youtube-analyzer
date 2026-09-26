@@ -72,9 +72,6 @@ This is a web application that provides statistics, trends, and content analysis
 - Posting trends
 - Answers to user questions
 
-## How Consistency is Maintained
-- 
-
 ## Important Design Decisions
 - 
 
