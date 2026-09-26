@@ -1,0 +1,83 @@
+/* Main page styling for the YouTube Channel Analyzer. */
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #f4f6f8;
+    color: #222;
+}
+
+/* Centers the app and prevents it from becoming too wide. */
+.container { max-width: 1150px; margin: 0 auto; padding: 40px 20px; }
+h1 { margin-bottom: 8px; }
+h2, h3 { margin-top: 0; }
+.subtitle, .muted, .note, .metric-note { color: #666; }
+.subtitle { margin-top: 0; margin-bottom: 30px; }
+.note, .metric-note { font-size: 14px; }
+
+/* Reusable white panel used throughout the page. */
+.card {
+    background: white;
+    border-radius: 10px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.status-card { padding: 16px 24px; }
+label { display: block; font-weight: bold; margin-bottom: 10px; }
+
+/* Put the input, dropdown, and button on the same row. */
+.search-row { display: flex; gap: 10px; }
+input, select { padding: 12px; border: 1px solid #bbb; border-radius: 6px; font-size: 16px; }
+input { flex: 1; }
+button { padding: 12px 18px; border: none; border-radius: 6px; background: #222; color: white; font-size: 16px; cursor: pointer; }
+button:hover { opacity: 0.9; }
+button:disabled { cursor: not-allowed; opacity: 0.6; }
+
+.success { color: #18794e; font-weight: bold; }
+.error { color: #b42318; font-weight: bold; }
+.error-message { background: #fff0f0; border: 1px solid #f0b5b5; border-radius: 8px; padding: 14px; color: #b42318; }
+.loading { font-weight: bold; }
+
+/* JavaScript adds/removes this class to hide and show sections. */
+.hidden { display: none; }
+
+.channel-header { display: flex; align-items: center; gap: 18px; margin-bottom: 24px; }
+.channel-thumbnail { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; }
+
+/* Statistic cards use CSS Grid. */
+.stats-grid { display: grid; gap: 12px; }
+.channel-grid, .analytics-grid { grid-template-columns: repeat(4, 1fr); }
+.stat { background: #f7f7f7; padding: 18px; border-radius: 8px; }
+.stat-label { display: block; color: #666; margin-bottom: 6px; font-size: 14px; }
+.stat strong { font-size: 22px; }
+
+.top-videos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 18px; }
+.top-video-card { border: 1px solid #ddd; border-radius: 8px; padding: 18px; }
+.top-video-card strong, .top-video-card span { display: block; }
+.top-video-card strong { margin-bottom: 6px; }
+
+.chart-card { margin-top: 24px; border-top: 1px solid #ddd; padding-top: 20px; }
+.chart-card canvas { max-height: 340px; }
+.metric-note { margin-bottom: 0; margin-top: 18px; }
+
+/* Allow the table to scroll horizontally on small screens. */
+.table-wrapper { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 12px; border-bottom: 1px solid #ddd; text-align: left; vertical-align: top; }
+th { background: #f7f7f7; }
+.video-cell { min-width: 280px; }
+.video-title { font-weight: bold; }
+.video-id { display: block; color: #777; font-size: 12px; margin-top: 4px; }
+
+/* Responsive layouts for smaller screens. */
+@media (max-width: 900px) {
+    .channel-grid, .analytics-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 650px) {
+    .search-row { flex-direction: column; }
+    .channel-grid, .analytics-grid, .top-videos { grid-template-columns: 1fr; }
+}

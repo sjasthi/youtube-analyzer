@@ -1,82 +1,64 @@
-# ICS 499 - YouTube Analyzer
+# YouTube Channel Analyzer
 
-## Authors
-- Ashley Zenzola
-- Chee Vang
+This version adds a Python analytics layer. In order to look up Creator analytics, use the UC.. id. Able to check at most 50 videos. Shows Subscribers, Total channel videos, Views and posting trends.
 
-## Objective
-Build a website for analyzing a YouTube channel.
+## What it calculates
 
-1. Collect and analyze information about the channel's videos.
+- Average views
+- Average likes
+- Average comments
+- Average video duration
+- Total views across the retrieved sample
+- Engagement rate
+- Average days between uploads
+- Estimated uploads per month
+- Most viewed video in the sample
+- Most liked video in the sample
+- Upload count by month
 
-2. Produce useful reports and statistics, such as:
-    - Number of videos
-    - Video lengths
-    - Likes
-    - Comments
-    - Video-posting trends
-    - Other meaningful metrics
+## Engagement formula
 
-3. Convert video/audio content to text when appropriate.
+```text
+(likes + comments) / views * 100
+```
 
-4. Build a RAG-based question-answering system over the channel's content.
+## Install the dependencies
 
-5. Allow users to ask questions about information contained across the channel's videos.
+Keep your existing `.env` and `.venv`, then run:
 
-## Project Overview
-This is a web application that provides statistics, trends, and content analysis for a YouTube channel.
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+```
 
-## Target Users
-- YouTube creators
-- Users interested in a YouTube channel
+## Run
 
-## Features
-- Enter a YouTube channel ID or URL
-- Retrieve channel and video information
-- Calculate statistics such as video length and likes
-- Analyze video-posting trends
-- Process video transcripts
-- Allow users to ask questions about channel content
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn backend.main:app --reload
+```
 
-## Scope
-- Analyze one channel at a time
-- No user accounts
-- Answers are based on available channel content
+Open:
 
-## Technologies Used (Subject to Change)
-- Python
-- FastAPI
-- HTML
-- CSS
-- JavaScript
-- PostgreSQL
-- RAG/AI libraries
-- Visual Studio Code
+```text
+http://127.0.0.1:8000
+```
 
-## External Libraries Used
-- 
+FastAPI docs:
 
-## How to Install Dependencies
-- 
+```text
+http://127.0.0.1:8000/docs
+```
 
-## How to Run the Program
-- 
+The main analytics endpoint is:
 
-## Expected Input
-- YouTube channel ID or URL
-- User questions
+```text
+GET /api/channel/{channel_id}/analytics?limit=10
+```
 
-## Expected Output
-- Channel statistics
-- Video statistics
-- Posting trends
-- Answers to user questions
+## What each file does
 
-## Important Design Decisions
-- 
-
-## Known Limitations
-- 
-
-## Testing Evidence
-- 
+- `backend/main.py` - FastAPI routes and application flow
+- `backend/youtube_service.py` - YouTube Data API communication
+- `backend/analytics_service.py` - statistics calculations with pandas
+- `frontend/index.html` - page structure
+- `frontend/style.css` - appearance/layout
+- `frontend/script.js` - calls FastAPI and updates the page
