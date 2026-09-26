@@ -54,17 +54,46 @@ This is a web application that provides statistics, trends, and content analysis
 - Visual Studio Code
 
 ## External Libraries Used
-- 
+- fastapi
+- uvicorn[standard]
+- google-api-python-client
+- python-dotenv
+- panda
 
 ## How to Install Dependencies
-- 
+- Keep your existing `.env` and `.venv`, then run:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+```
 
 ## How to Run the Program
-- 
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn backend.main:app --reload
+```
+
+Open:
+
+```text
+http://127.0.0.1:8000
+```
+
+FastAPI docs:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+The main analytics endpoint is:
+
+```text
+GET /api/channel/{channel_id}/analytics?limit=10
+```
 
 ## Expected Input
-- YouTube channel ID or URL
-- User questions
+- YouTube channel ID or URL (Only the UC id at the moment)
+- User questions (Not Implemented Yet)
 
 ## Expected Output
 - Channel statistics
@@ -79,4 +108,13 @@ This is a web application that provides statistics, trends, and content analysis
 - 
 
 ## Testing Evidence
-- 
+-
+
+## What each file does
+
+- `backend/main.py` - FastAPI routes and application flow
+- `backend/youtube_service.py` - YouTube Data API communication
+- `backend/analytics_service.py` - statistics calculations with pandas
+- `frontend/index.html` - page structure
+- `frontend/style.css` - appearance/layout
+- `frontend/script.js` - calls FastAPI and updates the page
