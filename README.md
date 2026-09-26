@@ -16,8 +16,11 @@ Build a website for analyzing a YouTube channel.
     - Comments
     - Video-posting trends
     - Other meaningful metrics
+
 3. Convert video/audio content to text when appropriate.
+
 4. Build a RAG-based question-answering system over the channel's content.
+
 5. Allow users to ask questions about information contained across the channel's videos.
 
 ## Project Overview
