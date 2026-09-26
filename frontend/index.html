@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- Makes the layout scale correctly on phones and tablets. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Channel Analyzer</title>
+
+    <!-- Our own CSS file served by FastAPI. -->
+    <link rel="stylesheet" href="/static/style.css">
+
+    <!-- Chart.js draws the posting-trend chart in the browser. -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <main class="container">
+        <header>
+            <h1>YouTube Channel Analyzer</h1>
+            <p class="subtitle">Analyze public channel information, recent videos, and posting trends.</p>
+        </header>
+
+        <!-- Search controls -->
+        <section class="card">
+            <label for="channelInput">YouTube Channel ID</label>
+            <div class="search-row">
+                <input id="channelInput" type="text" placeholder="Example: UC...">
+
+                <!-- Select how many recent videos Python should analyze. -->
+                <select id="videoLimit">
+                    <option value="10">10 videos</option>
+                    <option value="25">25 videos</option>
+                    <option value="50">50 videos</option>
+                </select>
+
+                <button id="analyzeButton">Analyze Channel</button>
+            </div>
+            <p class="note">Analytics describe only the retrieved video sample.</p>
+        </section>
+
+        <!-- JavaScript updates this after calling /api/health. -->
+        <section class="card status-card">
+            <strong>Backend:</strong>
+            <span id="backendStatus">Checking connection...</span>
+        </section>
+
+        <!-- Hidden until JavaScript needs them. -->
+        <p id="loadingMessage" class="loading hidden">Loading and analyzing YouTube channel data...</p>
+        <p id="errorMessage" class="error-message hidden"></p>
+
+        <!-- Channel summary. JavaScript fills in these values. -->
+        <section id="channelSection" class="card hidden">
+            <div class="channel-header">
+                <img id="channelThumbnail" class="channel-thumbnail" alt="Channel thumbnail">
+                <div>
+                    <h2 id="channelTitle"></h2>
+                    <p id="channelHandle" class="muted"></p>
+                </div>
+            </div>
+
+            <div class="stats-grid channel-grid">
+                <div class="stat"><span class="stat-label">Subscribers</span><strong id="subscriberCount">0</strong></div>
+                <div class="stat"><span class="stat-label">Total Videos</span><strong id="videoCount">0</strong></div>
+                <div class="stat"><span class="stat-label">Channel Views</span><strong id="viewCount">0</strong></div>
+                <div class="stat"><span class="stat-label">Videos Retrieved</span><strong id="retrievedCount">0</strong></div>
+            </div>
+        </section>
+
+        <!-- Analytics calculated by Python/pandas. -->
+        <section id="analyticsSection" class="card hidden">
+            <h2>Video Sample Analytics</h2>
+
+            <div class="stats-grid analytics-grid">
+                <div class="stat"><span class="stat-label">Average Views</span><strong id="averageViews">0</strong></div>
+                <div class="stat"><span class="stat-label">Average Likes</span><strong id="averageLikes">0</strong></div>
+                <div class="stat"><span class="stat-label">Average Comments</span><strong id="averageComments">0</strong></div>
+                <div class="stat"><span class="stat-label">Average Length</span><strong id="averageDuration">0:00</strong></div>
+                <div class="stat"><span class="stat-label">Sample Total Views</span><strong id="sampleTotalViews">0</strong></div>
+                <div class="stat"><span class="stat-label">Engagement Rate</span><strong id="engagementRate">0%</strong></div>
+                <div class="stat"><span class="stat-label">Avg. Days Between Uploads</span><strong id="averageDaysBetweenUploads">N/A</strong></div>
+                <div class="stat"><span class="stat-label">Est. Uploads / Month</span><strong id="uploadsPerMonth">N/A</strong></div>
+            </div>
+
+            <!-- Best-performing videos in the retrieved sample. -->
+            <div class="top-videos">
+                <div class="top-video-card">
+                    <span class="stat-label">Most Viewed in Sample</span>
+                    <strong id="mostViewedTitle">N/A</strong>
+                    <span id="mostViewedValue" class="muted"></span>
+                </div>
+                <div class="top-video-card">
+                    <span class="stat-label">Most Liked in Sample</span>
+                    <strong id="mostLikedTitle">N/A</strong>
+                    <span id="mostLikedValue" class="muted"></span>
+                </div>
+            </div>
+
+            <!-- Chart.js draws inside this canvas. -->
+            <div class="chart-card">
+                <h3>Posting Trend</h3>
+                <canvas id="uploadTrendChart"></canvas>
+            </div>
+
+            <p class="metric-note">Engagement rate = (likes + comments) ÷ views × 100 for the retrieved sample.</p>
+        </section>
+
+        <!-- Recent-video table. JavaScript creates the table rows. -->
+        <section id="videosSection" class="card hidden">
+            <h2>Recent Videos</h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Video</th><th>Published</th><th>Length</th><th>Views</th><th>Likes</th><th>Comments</th>
+                        </tr>
+                    </thead>
+                    <tbody id="videoTableBody"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <!-- Load our JavaScript after the HTML elements have been created. -->
+    <script src="/static/script.js"></script>
+</body>
+</html>

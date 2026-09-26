@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+google-api-python-client
+python-dotenv
+pandas
