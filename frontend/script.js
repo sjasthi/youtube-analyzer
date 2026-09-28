@@ -38,6 +38,16 @@ const mostLikedTitle = document.getElementById("mostLikedTitle");
 const mostLikedValue = document.getElementById("mostLikedValue");
 const videoTableBody = document.getElementById("videoTableBody");
 
+// Gets references to the RAG question and answer elements
+const questionSection = document.getElementById("questionSection");
+const questionInput = document.getElementById("questionInput");
+const askQuestionButton = document.getElementById("askQuestionButton");
+const answerText = document.getElementById("answerText");
+
+// Default messages for the question and answer section
+const defaultAnswer = "The answer will appear here.";
+const temporaryAnswer = "RAG answer will be connected here.";
+
 // Store the current Chart.js object so it can be replaced on the next search.
 let uploadTrendChart = null;
 
@@ -238,6 +248,7 @@ async function analyzeChannel() {
     channelSection.classList.add("hidden");
     analyticsSection.classList.add("hidden");
     videosSection.classList.add("hidden");
+    questionSection.classList.add("hidden");
 
     if (channelId === "") {
         errorMessage.textContent = "Please enter a YouTube channel ID.";
@@ -262,6 +273,10 @@ async function analyzeChannel() {
         displayChannel(data.channel, data.retrieved_video_count);
         displayAnalytics(data.analytics);
         displayVideos(data.videos);
+
+        // Shows the Q&A section after channel analysis
+        questionSection.classList.remove("hidden");
+
     } catch (error) {
         errorMessage.textContent = `Error: ${error.message}`;
         errorMessage.classList.remove("hidden");
@@ -272,6 +287,28 @@ async function analyzeChannel() {
     }
 }
 
+// Handles the Ask Question button
+// FIXME: The actual RAG backend will be connected later
+function askQuestion() {
+    const question = questionInput.value.trim();
+
+    // Validates that the user entered a question
+    if (question === "") {
+        answerText.textContent = "Please enter a question.";
+        return;
+    }
+
+    // Temp message until the RAG backend is connected
+    answerText.textContent = temporaryAnswer;
+}
+
+// Asks the question when the button is clicked
+askQuestionButton.addEventListener("click", askQuestion);
+
+// Asks the question when Enter is pressed
+questionInput.addEventListener("keydown", event => {
+    if (event.key === "Enter") askQuestion();
+});
 
 // Clicking the button starts the analysis.
 analyzeButton.addEventListener("click", analyzeChannel);
@@ -280,6 +317,10 @@ analyzeButton.addEventListener("click", analyzeChannel);
 channelInput.addEventListener("keydown", event => {
     if (event.key === "Enter") analyzeChannel();
 });
+
+// Clears the question and answer fields when the page loads
+questionInput.value = "";
+answerText.textContent = defaultAnswer;
 
 // Check FastAPI as soon as the page loads.
 checkBackendConnection();
