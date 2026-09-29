@@ -336,6 +336,12 @@ questionInput.addEventListener("keydown", event => {
 clearQuestionButton.addEventListener("click", () => {
     questionInput.value = "";
     answerText.textContent = defaultAnswer;
+    askQuestionButton.disabled = true;
+});
+
+// Enables the Ask Question button when the user enters text
+questionInput.addEventListener("input", () => {
+    askQuestionButton.disabled = questionInput.value.trim() === "";
 });
 
 // Clicking the button starts the analysis.
@@ -349,6 +355,7 @@ channelInput.addEventListener("keydown", event => {
 // Clears the question and answer fields when the page loads
 questionInput.value = "";
 answerText.textContent = defaultAnswer;
+askQuestionButton.disabled = true;
 
 // Check FastAPI as soon as the page loads.
 checkBackendConnection();
