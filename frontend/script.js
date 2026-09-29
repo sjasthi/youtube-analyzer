@@ -43,6 +43,7 @@ const questionSection = document.getElementById("questionSection");
 const questionInput = document.getElementById("questionInput");
 const askQuestionButton = document.getElementById("askQuestionButton");
 const answerText = document.getElementById("answerText");
+const clearQuestionButton = document.getElementById("clearQuestionButton");
 
 // Default messages for the question and answer section
 const defaultAnswer = "The answer will appear here.";
@@ -329,6 +330,12 @@ askQuestionButton.addEventListener("click", askQuestion);
 // Asks the question when Enter is pressed
 questionInput.addEventListener("keydown", event => {
     if (event.key === "Enter") askQuestion();
+});
+
+// Clears the question and answer
+clearQuestionButton.addEventListener("click", () => {
+    questionInput.value = "";
+    answerText.textContent = defaultAnswer;
 });
 
 // Clicking the button starts the analysis.
