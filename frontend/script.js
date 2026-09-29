@@ -46,7 +46,6 @@ const answerText = document.getElementById("answerText");
 
 // Default messages for the question and answer section
 const defaultAnswer = "The answer will appear here.";
-const temporaryAnswer = "RAG answer will be connected here.";
 
 // Store the current Chart.js object so it can be replaced on the next search.
 let uploadTrendChart = null;
@@ -288,18 +287,40 @@ async function analyzeChannel() {
 }
 
 // Handles the Ask Question button
-// FIXME: The actual RAG backend will be connected later
-function askQuestion() {
+async function askQuestion() {
     const question = questionInput.value.trim();
 
-    // Validates that the user entered a question
+    // Checks for an empty question
     if (question === "") {
         answerText.textContent = "Please enter a question.";
         return;
     }
+    
+    answerText.textContent = "Loading answer...";
+    
+    try {
+        const response = await fetch("/api/question", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            
+            body: JSON.stringify({
+                question: question,
+            }),
+        });
+        
+        const data = await response.json();
 
-    // Temp message until the RAG backend is connected
-    answerText.textContent = temporaryAnswer;
+        if (!response.ok) {
+            throw new Error(data.detail || "Unable to get an answer.");
+        }
+
+        answerText.textContent = data.answer;
+
+    } catch (error) {
+        answerText.textContent = `Error: ${error.message}`;
+    }
 }
 
 // Asks the question when the button is clicked

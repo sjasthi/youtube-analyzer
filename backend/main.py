@@ -6,6 +6,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from pydantic import BaseModel
+
 from backend.analytics_service import calculate_analytics
 from backend.youtube_service import get_channel_by_id, get_recent_videos
 
@@ -29,6 +31,16 @@ def health_check():
         "message": "FastAPI backend is connected successfully!",
     }
 
+# Defines the JSON structure
+class QuestionRequest(BaseModel):
+    question: str
+
+# Receives a question from the frontend and returns a temporary answer
+@app.post("/api/question")
+def ask_question(request: QuestionRequest):
+    return {
+        "answer": "API: RAG answer will be connected here."
+    }
 
 @app.get("/api/channel/{channel_id}")
 def get_channel(channel_id: str):
