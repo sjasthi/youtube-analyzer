@@ -17,6 +17,8 @@
 - Most viewed video in the sample
 - Most liked video in the sample
 - Upload count by month
+- Q&A section for asking questions about video content (RAG not yet implemented)
+- Example questions in the Q&A section
 
 ## Authors
 - Ashley Zenzola
