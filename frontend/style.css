@@ -43,6 +43,30 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
     gap: 10px;
 }
 
+/* Styles the example questions */
+.example-questions {
+    margin-top: 15px;
+}
+
+.example-questions p {
+    margin-bottom: 8px;
+}
+
+.example-question {
+    margin-right: 8px;
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    background: #f7f7f7;
+    color: black;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.example-question:hover {
+    background: #e5e5e5;
+}
+
 /* Styles the answer card */
 .answer-card {
     margin-top: 20px;

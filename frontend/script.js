@@ -44,6 +44,7 @@ const questionInput = document.getElementById("questionInput");
 const askQuestionButton = document.getElementById("askQuestionButton");
 const answerText = document.getElementById("answerText");
 const clearQuestionButton = document.getElementById("clearQuestionButton");
+const exampleQuestions = document.querySelectorAll(".example-question");
 
 // Default messages for the question and answer section
 const defaultAnswer = "The answer will appear here.";
@@ -342,6 +343,14 @@ clearQuestionButton.addEventListener("click", () => {
 // Enables the Ask Question button when the user enters text
 questionInput.addEventListener("input", () => {
     askQuestionButton.disabled = questionInput.value.trim() === "";
+});
+
+// Puts an example question into the question input
+exampleQuestions.forEach(button => {
+    button.addEventListener("click", () => {
+        questionInput.value = button.textContent.trim();
+        askQuestionButton.disabled = false;
+    });
 });
 
 // Clicking the button starts the analysis.
