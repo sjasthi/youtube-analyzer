@@ -102,6 +102,42 @@
 
             <p class="metric-note">Engagement rate = (likes + comments) ÷ views × 100 for the retrieved sample.</p>
         </section>
+        
+        <!-- Ask questions about the channel -->
+        <section id = "questionSection" class = "card hidden">
+            <h2>Enter a Question</h2>
+            <p class = "note">Ask questions about the content covered in these videos.</p>
+
+            <div class = "question-row">
+                <input
+                    id = "questionInput"
+                    type = "text"
+                    placeholder = "Example: What topics are discussed in these videos?"
+                >
+                <button id = "askQuestionButton">Ask Question</button>
+                <button id = "clearQuestionButton">Clear</button>
+            </div>
+            
+            <div class = "example-questions">
+                <p>Example Questions:</p>
+                <button class = "example-question">
+                    What topics are discussed in these videos?
+                </button>
+                
+                <button class = "example-question">
+                    What is the most recent video about?
+                </button>
+                
+                <button class = "example-question">
+                    What topics do these videos have in common?
+                </button>
+            </div>
+
+            <div class = "answer-card">
+                <h3>Answer</h3>
+                <p id = "answerText">The answer will appear here.</p>
+            </div>
+        </section>
 
         <!-- Recent-video table. JavaScript creates the table rows. -->
         <section id="videosSection" class="card hidden">

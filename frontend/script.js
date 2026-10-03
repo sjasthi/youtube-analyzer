@@ -38,6 +38,17 @@ const mostLikedTitle = document.getElementById("mostLikedTitle");
 const mostLikedValue = document.getElementById("mostLikedValue");
 const videoTableBody = document.getElementById("videoTableBody");
 
+// Gets references to the RAG question and answer elements
+const questionSection = document.getElementById("questionSection");
+const questionInput = document.getElementById("questionInput");
+const askQuestionButton = document.getElementById("askQuestionButton");
+const answerText = document.getElementById("answerText");
+const clearQuestionButton = document.getElementById("clearQuestionButton");
+const exampleQuestions = document.querySelectorAll(".example-question");
+
+// Default messages for the question and answer section
+const defaultAnswer = "The answer will appear here.";
+
 // Store the current Chart.js object so it can be replaced on the next search.
 let uploadTrendChart = null;
 
@@ -238,6 +249,7 @@ async function analyzeChannel() {
     channelSection.classList.add("hidden");
     analyticsSection.classList.add("hidden");
     videosSection.classList.add("hidden");
+    questionSection.classList.add("hidden");
 
     if (channelId === "") {
         errorMessage.textContent = "Please enter a YouTube channel ID.";
@@ -262,6 +274,10 @@ async function analyzeChannel() {
         displayChannel(data.channel, data.retrieved_video_count);
         displayAnalytics(data.analytics);
         displayVideos(data.videos);
+
+        // Shows the Q&A section after channel analysis
+        questionSection.classList.remove("hidden");
+
     } catch (error) {
         errorMessage.textContent = `Error: ${error.message}`;
         errorMessage.classList.remove("hidden");
@@ -272,6 +288,70 @@ async function analyzeChannel() {
     }
 }
 
+// Handles the Ask Question button
+async function askQuestion() {
+    const question = questionInput.value.trim();
+
+    // Checks for an empty question
+    if (question === "") {
+        answerText.textContent = "Please enter a question.";
+        return;
+    }
+    
+    answerText.textContent = "Loading answer...";
+    
+    try {
+        const response = await fetch("/api/question", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            
+            body: JSON.stringify({
+                question: question,
+            }),
+        });
+        
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.detail || "Unable to get an answer.");
+        }
+
+        answerText.textContent = data.answer;
+
+    } catch (error) {
+        answerText.textContent = `Error: ${error.message}`;
+    }
+}
+
+// Asks the question when the button is clicked
+askQuestionButton.addEventListener("click", askQuestion);
+
+// Asks the question when Enter is pressed
+questionInput.addEventListener("keydown", event => {
+    if (event.key === "Enter") askQuestion();
+});
+
+// Clears the question and answer
+clearQuestionButton.addEventListener("click", () => {
+    questionInput.value = "";
+    answerText.textContent = defaultAnswer;
+    askQuestionButton.disabled = true;
+});
+
+// Enables the Ask Question button when the user enters text
+questionInput.addEventListener("input", () => {
+    askQuestionButton.disabled = questionInput.value.trim() === "";
+});
+
+// Puts an example question into the question input
+exampleQuestions.forEach(button => {
+    button.addEventListener("click", () => {
+        questionInput.value = button.textContent.trim();
+        askQuestionButton.disabled = false;
+    });
+});
 
 // Clicking the button starts the analysis.
 analyzeButton.addEventListener("click", analyzeChannel);
@@ -280,6 +360,11 @@ analyzeButton.addEventListener("click", analyzeChannel);
 channelInput.addEventListener("keydown", event => {
     if (event.key === "Enter") analyzeChannel();
 });
+
+// Clears the question and answer fields when the page loads
+questionInput.value = "";
+answerText.textContent = defaultAnswer;
+askQuestionButton.disabled = true;
 
 // Check FastAPI as soon as the page loads.
 checkBackendConnection();
