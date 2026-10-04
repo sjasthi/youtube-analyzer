@@ -239,7 +239,10 @@ function displayVideos(videos) {
     // If DataTables was already created from a previous search, destroy it before creating a new one.
     if (videoDataTable) {
         videoDataTable.destroy();
+        videoDataTable = null;
     }
+
+    videoTableBody.innerHTML = "";
 
     // Create the new DataTable
     videoDataTable = $("#videoTable").DataTable({
@@ -253,7 +256,7 @@ function displayVideos(videos) {
 
     // Connect the individual column filters
     $("#videoTable thead tr.filter-row th").each(function (columnIndex) {
-        $("input", this).on("keyup change", function() {
+        $("input", this).off("keyup change").on("keyup change", function() {
             videoDataTable.column(columnIndex).search(this.value).draw();
         });
     });
