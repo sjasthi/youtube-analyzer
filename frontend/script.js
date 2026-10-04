@@ -187,6 +187,12 @@ function displayUploadChart(monthData) {
 
 
 function displayVideos(videos) {
+    // If DataTables was already created from a previous search, destroy it before creating a new one.
+    if (videoDataTable) {
+        videoDataTable.destroy();
+        videoDataTable = null;
+    }
+
     // Clear rows from the previous channel analysis.
     videoTableBody.innerHTML = "";
 
@@ -218,9 +224,11 @@ function displayVideos(videos) {
 
             const publishedCell = document.createElement("td");
             publishedCell.textContent = formatDate(video.published_at);
+            publishedCell.dataset.order = new Date(video.published_at).getTime();
 
             const durationCell = document.createElement("td");
             durationCell.textContent = formatDuration(video.duration_seconds);
+            durationCell.setAttribute("data-order", video.duration_seconds);
 
             const viewsCell = document.createElement("td");
             viewsCell.textContent = formatNumber(video.view_count);
@@ -236,21 +244,20 @@ function displayVideos(videos) {
         });
     }
 
-    // If DataTables was already created from a previous search, destroy it before creating a new one.
-    if (videoDataTable) {
-        videoDataTable.destroy();
-        videoDataTable = null;
-    }
-
-    videoTableBody.innerHTML = "";
-
     // Create the new DataTable
     videoDataTable = $("#videoTable").DataTable({
         pageLength: 10,
         lengthMenu: [10, 25, 50],
         order: [[1, "desc"]],
-
-        // Preevent the second header row from becoming another sortable heading row.
+        columnDefs: [
+            {
+                // Column 1 = Published
+                targets: 1,
+                // Only switch between newest and oldest
+                orderSequence: ["desc", "asc"]
+            }
+        ],  
+        // Prevent the second header row from becoming another sortable heading row.
         orderCellsTop: true
     });
 
