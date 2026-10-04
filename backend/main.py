@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from backend.analytics_service import calculate_analytics
-from backend.youtube_service import get_channel_by_id, get_recent_videos
+from backend.youtube_service import get_all_videos, get_channel_by_id
 
 # Create the FastAPI application.
 app = FastAPI(title="YouTube Channel Analyzer")
@@ -59,18 +59,13 @@ def get_channel(channel_id: str):
 
 
 @app.get("/api/channel/{channel_id}/videos")
-def get_channel_videos(
-    channel_id: str,
-    # FastAPI validates that limit stays between 1 and 50.
-    limit: int = Query(default=10, ge=1, le=50),
-):
-    """Return recent videos for a channel."""
+def get_channel_videos(channel_id: str):
+    """Return all publicly available uploaded videos for a channel."""
     try:
-        result = get_recent_videos(channel_id, limit)
+        # youtube_service.py follows nextPageToken until no pages remain.
+        result = get_all_videos(channel_id)
     except RuntimeError as error:
         raise HTTPException(status_code=500, detail=str(error))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error))
     except Exception as error:
         raise HTTPException(status_code=502, detail=f"YouTube API request failed: {error}")
 
@@ -81,18 +76,13 @@ def get_channel_videos(
 
 
 @app.get("/api/channel/{channel_id}/analytics")
-def get_channel_analytics(
-    channel_id: str,
-    limit: int = Query(default=10, ge=1, le=50),
-):
+def get_channel_analytics(channel_id: str):
     """Return channel data, recent videos, and calculated analytics."""
     try:
-        # Retrieve the raw YouTube video data first.
-        result = get_recent_videos(channel_id, limit)
+        # Backend retrieves every available upload
+        result = get_all_videos(channel_id)
     except RuntimeError as error:
         raise HTTPException(status_code=500, detail=str(error))
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error))
     except Exception as error:
         raise HTTPException(status_code=502, detail=f"YouTube API request failed: {error}")
 

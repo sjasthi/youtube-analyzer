@@ -2,6 +2,7 @@
 
 ## What's new this version
 
+FP 3
 - Add analytics
 - Use UC id to look up creators (Soon to be updated to use URLs and @handle)
 - Able to pull at most 50 videos at once
@@ -19,6 +20,11 @@
 - Upload count by month
 - Q&A section for asking questions about video content (RAG not yet implemented)
 - Example questions in the Q&A section
+
+FP4
+- added pagination, search, sort
+- remove video limit and retrieve all channel videos
+- removed video count selector
 
 ## Authors
 - Ashley Zenzola
@@ -79,6 +85,12 @@ This is a web application that provides statistics, trends, and content analysis
 - google-api-python-client
 - python-dotenv
 - panda
+
+## Create the virtual environment to run
+ - This doesn't need to be run again if already done
+```powershell
+py -m venv .venv
+```
 
 ## How to Install Dependencies
 - Keep your existing `.env` and `.venv`, then run:
