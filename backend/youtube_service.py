@@ -11,6 +11,9 @@ from googleapiclient.discovery import build
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
+# YouTube list requests are handled in groups of up to 50 items.
+YOUTUBE_BATCH_SIZE = 50
+
 
 def get_youtube_client():
     """Create the YouTube API client using our API key."""
@@ -84,12 +87,95 @@ def get_channel_by_id(channel_id):
     }
 
 
-def get_recent_videos(channel_id, max_results=50):
-    """Retrieve up to 50 recent uploaded videos and their statistics."""
+def get_all_upload_video_ids(youtube, uploads_playlist_id):
+    """
+    Retrieve every video ID available from a channel's uploads playlist.
 
-    # The YouTube playlistItems endpoint supports at most 50 items per request.
-    if max_results < 1 or max_results > 50:
-        raise ValueError("max_results must be between 1 and 50.")
+    YouTube returns at most 50 playlist items in one API response. When more
+    videos exist, the response contains nextPageToken. We keep sending another
+    request with that token until YouTube stops returning a nextPageToken.
+    """
+
+    video_ids = []
+    next_page_token = None
+
+    while True:
+        # Ask for the maximum number YouTube allows on each playlist request.
+        request = youtube.playlistItems().list(
+            part="contentDetails",
+            playlistId=uploads_playlist_id,
+            maxResults=YOUTUBE_BATCH_SIZE,
+            pageToken=next_page_token,
+        )
+
+        response = request.execute()
+
+        # Add every valid video ID from this page to our master list.
+        for item in response.get("items", []):
+            video_id = item.get("contentDetails", {}).get("videoId")
+            if video_id:
+                video_ids.append(video_id)
+
+        # YouTube gives us this token only when another page exists.
+        next_page_token = response.get("nextPageToken")
+
+        # No token means we reached the end of the uploads playlist.
+        if not next_page_token:
+            break
+
+    return video_ids
+
+
+def get_video_details_in_batches(youtube, video_ids):
+    """
+    Retrieve detailed metadata/statistics for all collected video IDs.
+
+    The video IDs are processed in groups of 50. A channel can therefore have
+    far more than 50 videos even though each individual API request is small.
+    """
+
+    videos_by_id = {}
+
+    for start in range(0, len(video_ids), YOUTUBE_BATCH_SIZE):
+        # Example for 120 IDs:
+        # batch 1 = IDs 0-49
+        # batch 2 = IDs 50-99
+        # batch 3 = IDs 100-119
+        batch_ids = video_ids[start : start + YOUTUBE_BATCH_SIZE]
+
+        response = (
+            youtube.videos()
+            .list(
+                part="snippet,statistics,contentDetails",
+                id=",".join(batch_ids),
+            )
+            .execute()
+        )
+
+        for video in response.get("items", []):
+            snippet = video.get("snippet", {})
+            statistics = video.get("statistics", {})
+            content_details = video.get("contentDetails", {})
+            duration_iso = content_details.get("duration", "PT0S")
+
+            videos_by_id[video["id"]] = {
+                "video_id": video["id"],
+                "title": snippet.get("title"),
+                "description": snippet.get("description"),
+                "published_at": snippet.get("publishedAt"),
+                "thumbnail_url": snippet.get("thumbnails", {}).get("medium", {}).get("url"),
+                "duration": duration_iso,
+                "duration_seconds": parse_duration_to_seconds(duration_iso),
+                "view_count": int(statistics.get("viewCount", 0)),
+                "like_count": int(statistics.get("likeCount", 0)),
+                "comment_count": int(statistics.get("commentCount", 0)),
+            }
+
+    return videos_by_id
+
+
+def get_all_videos(channel_id):
+    """Retrieve all publicly available uploaded videos and their statistics."""
 
     # First get the channel so we can find its uploads playlist ID.
     channel = get_channel_by_id(channel_id)
@@ -98,63 +184,33 @@ def get_recent_videos(channel_id, max_results=50):
 
     uploads_playlist_id = channel.get("uploads_playlist_id")
     if not uploads_playlist_id:
-        return {"channel": channel, "videos": [], "retrieved_video_count": 0}
+        return {
+            "channel": channel,
+            "videos": [],
+            "retrieved_video_count": 0,
+        }
 
     youtube = get_youtube_client()
 
-    # Step 1: get recent video IDs from the channel's uploads playlist.
-    playlist_response = (
-        youtube.playlistItems()
-        .list(
-            part="contentDetails",
-            playlistId=uploads_playlist_id,
-            maxResults=max_results,
-        )
-        .execute()
+    # Step 1: follow YouTube pagination until every available upload ID is read.
+    video_ids = get_all_upload_video_ids(
+        youtube=youtube,
+        uploads_playlist_id=uploads_playlist_id,
     )
-
-    video_ids = [
-        item["contentDetails"]["videoId"]
-        for item in playlist_response.get("items", [])
-        if item.get("contentDetails", {}).get("videoId")
-    ]
 
     if not video_ids:
-        return {"channel": channel, "videos": [], "retrieved_video_count": 0}
-
-    # Step 2: retrieve details/statistics for all of those video IDs.
-    videos_response = (
-        youtube.videos()
-        .list(
-            part="snippet,statistics,contentDetails",
-            id=",".join(video_ids),
-        )
-        .execute()
-    )
-
-    # Store results by ID so we can restore playlist order afterward.
-    videos_by_id = {}
-
-    for video in videos_response.get("items", []):
-        snippet = video.get("snippet", {})
-        statistics = video.get("statistics", {})
-        content_details = video.get("contentDetails", {})
-        duration_iso = content_details.get("duration", "PT0S")
-
-        videos_by_id[video["id"]] = {
-            "video_id": video["id"],
-            "title": snippet.get("title"),
-            "description": snippet.get("description"),
-            "published_at": snippet.get("publishedAt"),
-            "thumbnail_url": snippet.get("thumbnails", {}).get("medium", {}).get("url"),
-            "duration": duration_iso,
-            "duration_seconds": parse_duration_to_seconds(duration_iso),
-            "view_count": int(statistics.get("viewCount", 0)),
-            "like_count": int(statistics.get("likeCount", 0)),
-            "comment_count": int(statistics.get("commentCount", 0)),
+        return {
+            "channel": channel,
+            "videos": [],
+            "retrieved_video_count": 0,
         }
 
+    # Step 2: retrieve full details/statistics in batches of 50 video IDs.
+    videos_by_id = get_video_details_in_batches(youtube, video_ids)
+
     # Keep the same newest-to-oldest order returned by the uploads playlist.
+    # A video can be missing here if YouTube returned its playlist item but did
+    # not return that video from videos.list (for example, unavailable content).
     ordered_videos = [
         videos_by_id[video_id]
         for video_id in video_ids

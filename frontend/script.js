@@ -11,7 +11,6 @@
 const backendStatus = document.getElementById("backendStatus");
 const analyzeButton = document.getElementById("analyzeButton");
 const channelInput = document.getElementById("channelInput");
-const videoLimit = document.getElementById("videoLimit");
 const loadingMessage = document.getElementById("loadingMessage");
 const errorMessage = document.getElementById("errorMessage");
 const channelSection = document.getElementById("channelSection");
@@ -52,6 +51,8 @@ const defaultAnswer = "The answer will appear here.";
 // Store the current Chart.js object so it can be replaced on the next search.
 let uploadTrendChart = null;
 
+// Store the current DataTables object so it can be replace on the next search.
+let videoDataTable = null;
 
 async function checkBackendConnection() {
     try {
@@ -235,6 +236,29 @@ function displayVideos(videos) {
         });
     }
 
+    // If DataTables was already created from a previous search, destroy it before creating a new one.
+    if (videoDataTable) {
+        videoDataTable.destroy();
+    }
+
+    // Create the new DataTable
+    videoDataTable = $("#videoTable").DataTable({
+        pageLength: 10,
+        lengthMenu: [10, 25, 50],
+        order: [[1, "desc"]],
+
+        // Preevent the second header row from becoming another sortable heading row.
+        orderCellsTop: true
+    });
+
+    // Connect the individual column filters
+    $("#videoTable thead tr.filter-row th").each(function (columnIndex) {
+        $("input", this).on("keyup change", function() {
+            videoDataTable.column(columnIndex).search(this.value).draw();
+        });
+    });
+
+    // Show the video section
     videosSection.classList.remove("hidden");
 }
 
@@ -242,7 +266,6 @@ function displayVideos(videos) {
 async function analyzeChannel() {
     // Read what the user typed/selected.
     const channelId = channelInput.value.trim();
-    const limit = videoLimit.value;
 
     // Hide previous results while the new request is running.
     errorMessage.classList.add("hidden");
@@ -261,8 +284,9 @@ async function analyzeChannel() {
     analyzeButton.disabled = true;
 
     try {
-        // Example URL: /api/channel/UC123/analytics?limit=25
-        const url = `/api/channel/${encodeURIComponent(channelId)}/analytics?limit=${limit}`;
+        // No video limit is sent. The backend follows YouTube pagination
+        // until it reaches the end of the channel's uploads playlist.
+        const url = `/api/channel/${encodeURIComponent(channelId)}/analytics`;
         const response = await fetch(url);
         const data = await response.json();
 
