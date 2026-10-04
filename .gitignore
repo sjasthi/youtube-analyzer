@@ -5,3 +5,5 @@ __pycache__/
 .vscode/
 .DS_Store
 Thumbs.db
+data/*.db
+data/*.db-*

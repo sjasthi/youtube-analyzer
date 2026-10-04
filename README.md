@@ -25,6 +25,7 @@ FP4
 - added pagination, search, sort
 - remove video limit and retrieve all channel videos
 - removed video count selector
+- Add database (SQLite) so it doesn't have to download the data again and just access previous called channels
 
 ## Authors
 - Ashley Zenzola
@@ -75,7 +76,7 @@ This is a web application that provides statistics, trends, and content analysis
 - HTML
 - CSS
 - JavaScript
-- PostgreSQL
+- SQLite
 - RAG/AI libraries
 - Visual Studio Code
 

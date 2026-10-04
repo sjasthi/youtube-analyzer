@@ -9,7 +9,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from backend.analytics_service import calculate_analytics
-from backend.youtube_service import get_all_videos, get_channel_by_id
+from backend.database_service import (
+    get_cached_channel_data,
+    get_database_stats,
+    initialize_database,
+    is_cache_fresh,
+    save_channel_and_videos,
+)
+from backend.youtube_service import get_all_videos
+
 
 # Create the FastAPI application.
 app = FastAPI(title="YouTube Channel Analyzer")
@@ -22,6 +30,47 @@ FRONTEND_DIR = BASE_DIR / "frontend"
 # Examples: /static/style.css and /static/script.js
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
+# Create the SQLite database/tables when the application starts importing.
+# CREATE TABLE IF NOT EXISTS makes this safe to run every time.
+initialize_database()
+
+
+def get_channel_data(channel_id: str, refresh: bool = False):
+    """Return channel/video data from cache when possible, otherwise sync YouTube.
+
+    Normal behavior:
+    1. If the channel is cached and less than 60 minutes old, use SQLite.
+    2. Otherwise retrieve the full channel from YouTube.
+    3. Save/update the result in SQLite.
+    4. Return the saved data.
+
+    refresh=True skips the freshness check and forces a YouTube sync.
+    """
+
+    if not refresh and is_cache_fresh(channel_id):
+        cached_result = get_cached_channel_data(channel_id)
+        if cached_result is not None:
+            cached_result["data_source"] = "database"
+            return cached_result
+
+    # Cache is missing/stale, or the caller explicitly requested a refresh.
+    result = get_all_videos(channel_id)
+
+    if result is None:
+        return None
+
+    # Upsert the channel and videos so repeated analyses do not duplicate rows.
+    save_channel_and_videos(
+        channel=result["channel"],
+        videos=result["videos"],
+    )
+
+    # Read it back from SQLite so both cached and newly synced responses use
+    # exactly the same structure.
+    saved_result = get_cached_channel_data(channel_id)
+    saved_result["data_source"] = "youtube"
+    return saved_result
+
 
 @app.get("/api/health")
 def health_check():
@@ -31,74 +80,113 @@ def health_check():
         "message": "FastAPI backend is connected successfully!",
     }
 
-# Defines the JSON structure
+
+# Defines the JSON structure for the temporary Q&A endpoint.
 class QuestionRequest(BaseModel):
     question: str
 
-# Receives a question from the frontend and returns a temporary answer
+
 @app.post("/api/question")
 def ask_question(request: QuestionRequest):
+    """Temporary endpoint; the real RAG pipeline will replace this later."""
     return {
         "answer": "API: RAG answer will be connected here."
     }
 
+
 @app.get("/api/channel/{channel_id}")
-def get_channel(channel_id: str):
-    """Return basic information for one channel."""
+def get_channel(
+    channel_id: str,
+    refresh: bool = Query(default=False),
+):
+    """Return basic channel information using SQLite caching."""
     try:
-        channel = get_channel_by_id(channel_id)
+        result = get_channel_data(channel_id, refresh=refresh)
     except RuntimeError as error:
         raise HTTPException(status_code=500, detail=str(error))
     except Exception as error:
-        raise HTTPException(status_code=502, detail=f"YouTube API request failed: {error}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Channel request failed: {error}",
+        )
 
-    if channel is None:
-        raise HTTPException(status_code=404, detail="YouTube channel was not found.")
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="YouTube channel was not found.",
+        )
 
-    return channel
+    return {
+        **result["channel"],
+        "data_source": result["data_source"],
+        "last_updated": result.get("last_updated"),
+    }
 
 
 @app.get("/api/channel/{channel_id}/videos")
-def get_channel_videos(channel_id: str):
-    """Return all publicly available uploaded videos for a channel."""
+def get_channel_videos(
+    channel_id: str,
+    refresh: bool = Query(default=False),
+):
+    """Return all saved/public videos, refreshing YouTube only when needed."""
     try:
-        # youtube_service.py follows nextPageToken until no pages remain.
-        result = get_all_videos(channel_id)
+        result = get_channel_data(channel_id, refresh=refresh)
     except RuntimeError as error:
         raise HTTPException(status_code=500, detail=str(error))
     except Exception as error:
-        raise HTTPException(status_code=502, detail=f"YouTube API request failed: {error}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Channel request failed: {error}",
+        )
 
     if result is None:
-        raise HTTPException(status_code=404, detail="YouTube channel was not found.")
+        raise HTTPException(
+            status_code=404,
+            detail="YouTube channel was not found.",
+        )
 
     return result
 
 
 @app.get("/api/channel/{channel_id}/analytics")
-def get_channel_analytics(channel_id: str):
-    """Return channel data, recent videos, and calculated analytics."""
+def get_channel_analytics(
+    channel_id: str,
+    refresh: bool = Query(default=False),
+):
+    """Return channel data, videos, and analytics using the SQLite cache."""
     try:
-        # Backend retrieves every available upload
-        result = get_all_videos(channel_id)
+        result = get_channel_data(channel_id, refresh=refresh)
     except RuntimeError as error:
         raise HTTPException(status_code=500, detail=str(error))
     except Exception as error:
-        raise HTTPException(status_code=502, detail=f"YouTube API request failed: {error}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Channel request failed: {error}",
+        )
 
     if result is None:
-        raise HTTPException(status_code=404, detail="YouTube channel was not found.")
+        raise HTTPException(
+            status_code=404,
+            detail="YouTube channel was not found.",
+        )
 
-    # Send the retrieved videos to our separate analytics layer.
+    # Analytics are calculated from the videos read from SQLite.
     analytics = calculate_analytics(result["videos"])
 
-    # The frontend receives everything it needs in one response.
     return {
         "channel": result["channel"],
         "retrieved_video_count": result["retrieved_video_count"],
         "analytics": analytics,
         "videos": result["videos"],
+        "data_source": result["data_source"],
+        "last_updated": result.get("last_updated"),
     }
+
+
+@app.get("/api/database/stats")
+def database_stats():
+    """Small testing endpoint showing how many rows are stored locally."""
+    return get_database_stats()
 
 
 @app.get("/")
