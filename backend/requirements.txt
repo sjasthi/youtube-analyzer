@@ -3,3 +3,4 @@ uvicorn[standard]
 google-api-python-client
 python-dotenv
 pandas
+youtube-transcript-api

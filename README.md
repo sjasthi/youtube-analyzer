@@ -26,6 +26,8 @@ FP4
 - remove video limit and retrieve all channel videos
 - removed video count selector
 - Add database (SQLite) so it doesn't have to download the data again and just access previous called channels
+- Input supports channel IDs and YouTube URLs
+- Added `youtube-transcript-api` for transcript retrieval testing
 
 ## Authors
 - Ashley Zenzola
