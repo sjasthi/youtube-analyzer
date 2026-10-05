@@ -285,7 +285,7 @@ async function analyzeChannel() {
     questionSection.classList.add("hidden");
 
     if (channelId === "") {
-        errorMessage.textContent = "Please enter a YouTube channel ID.";
+        errorMessage.textContent = "Please enter a YouTube channel ID or URL.";
         errorMessage.classList.remove("hidden");
         return;
     }
@@ -296,7 +296,21 @@ async function analyzeChannel() {
     try {
         // No video limit is sent. The backend follows YouTube pagination
         // until it reaches the end of the channel's uploads playlist.
-        const url = `/api/channel/${encodeURIComponent(channelId)}/analytics`;
+
+        // Resolves the user's channel ID or URL into a channel ID
+        const resolveUrl = `/api/resolve-channel?channel_input=${encodeURIComponent(channelId)}`;
+        const resolveResponse = await fetch(resolveUrl);
+        const resolveData = await resolveResponse.json();
+        
+        if (!resolveResponse.ok) {
+            throw new Error(resolveData.detail || "Unable to find YouTube channel.");
+        }
+        
+        const resolvedChannelId = resolveData.channel_id;
+        
+        // Use the resolved channel ID to request the channel analytics
+        const url = `/api/channel/${encodeURIComponent(resolvedChannelId)}/analytics`;
+
         const response = await fetch(url);
         const data = await response.json();
 

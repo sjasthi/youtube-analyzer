@@ -16,8 +16,9 @@ from backend.database_service import (
     is_cache_fresh,
     save_channel_and_videos,
 )
-from backend.youtube_service import get_all_videos
 
+from backend.youtube_service import get_all_videos, resolve_channel_id
+from backend.transcript_service import get_video_transcripts
 
 # Create the FastAPI application.
 app = FastAPI(title="YouTube Channel Analyzer")
@@ -34,8 +35,7 @@ app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 # CREATE TABLE IF NOT EXISTS makes this safe to run every time.
 initialize_database()
 
-
-def get_channel_data(channel_id: str, refresh: bool = False):
+def get_channel_data(channel_input, refresh=False):
     """Return channel/video data from cache when possible, otherwise sync YouTube.
 
     Normal behavior:
@@ -46,6 +46,10 @@ def get_channel_data(channel_id: str, refresh: bool = False):
 
     refresh=True skips the freshness check and forces a YouTube sync.
     """
+    channel_id = resolve_channel_id(channel_input)
+
+    if channel_id is None:
+        return None
 
     if not refresh and is_cache_fresh(channel_id):
         cached_result = get_cached_channel_data(channel_id)
@@ -80,6 +84,20 @@ def health_check():
         "message": "FastAPI backend is connected successfully!",
     }
 
+
+@app.get("/api/resolve-channel")
+def resolve_channel(channel_input: str):
+    """Convert a channel ID or YouTube URL into a channel ID."""
+
+    channel_id = resolve_channel_id(channel_input)
+
+    if channel_id is None:
+        raise HTTPException(
+            status_code=404,
+            detail="YouTube channel was not found.",
+        )
+
+    return {"channel_id": channel_id}
 
 # Defines the JSON structure for the temporary Q&A endpoint.
 class QuestionRequest(BaseModel):
@@ -180,6 +198,46 @@ def get_channel_analytics(
         "videos": result["videos"],
         "data_source": result["data_source"],
         "last_updated": result.get("last_updated"),
+    }
+
+
+# FIXME: Transcript Testing (Will edit more later)
+@app.get("/api/channel/{channel_id}/transcripts")
+def get_channel_transcripts(channel_id: str):
+    """Return available transcripts for a channel's videos."""
+
+    try:
+        result = get_channel_data(channel_id)
+    
+    except RuntimeError as error:
+        raise HTTPException(status_code=500, detail=str(error))
+    
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Channel request failed: {error}",
+        )
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="YouTube channel was not found.",
+        )
+
+    # Only uses a few videos while testing transcripts
+    videos = result["videos"][:3]
+
+    # Prints the test videos to the console
+    print("TEST VIDEOS:")
+    for video in videos:
+        print(video["video_id"], video["title"])
+
+    # Retrieves transcripts for the test videos
+    transcripts = get_video_transcripts(videos)
+
+    return {
+        "transcripts": transcripts,
+        "transcript_count": len(transcripts),
     }
 
 

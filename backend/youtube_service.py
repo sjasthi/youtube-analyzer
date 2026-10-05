@@ -30,6 +30,36 @@ def get_youtube_client():
     return build("youtube", "v3", developerKey=api_key)
 
 
+def resolve_channel_id(channel_input):
+    """Convert a channel ID or YouTube channel URL into a channel ID."""
+
+    channel_input = channel_input.strip()
+
+    # Direct channel ID
+    if channel_input.startswith("UC") and "/" not in channel_input:
+        return channel_input
+
+    # Channel URL: youtube.com/channel/UC...
+    if "/channel/" in channel_input:
+        return channel_input.split("/channel/")[1].split("/")[0]
+
+    # Handle URL: youtube.com/@username
+    if "/@" in channel_input:
+        handle = "@" + channel_input.split("/@")[1].split("/")[0]
+
+        youtube = get_youtube_client()
+
+        response = youtube.channels().list(
+            part="id",
+            forHandle=handle
+        ).execute()
+
+        if response["items"]:
+            return response["items"][0]["id"]
+
+    return None
+
+
 def parse_duration_to_seconds(duration):
     """Convert a YouTube duration such as PT12M30S into total seconds."""
 
