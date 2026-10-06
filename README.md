@@ -126,6 +126,11 @@ The main analytics endpoint is:
 GET /api/channel/{channel_id}/analytics?limit=10
 ```
 
+## Transcript Testing
+```powershell
+.\.venv\Scripts\python.exe backend\transcript_service.py
+```
+
 ## Expected Input
 - YouTube channel ID or URL (Only the UC id at the moment)
 - User questions (Not Implemented Yet)
