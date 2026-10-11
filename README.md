@@ -2,7 +2,7 @@
 
 ## What's new this version
 
-FP 3
+<b>FP 3</b>
 - Add analytics
 - Use UC id to look up creators (Soon to be updated to use URLs and @handle)
 - Able to pull at most 50 videos at once
@@ -21,13 +21,31 @@ FP 3
 - Q&A section for asking questions about video content (RAG not yet implemented)
 - Example questions in the Q&A section
 
-FP4
+<b>FP4</b>
 - added pagination, search, sort
 - remove video limit and retrieve all channel videos
 - removed video count selector
 - Add database (SQLite) so it doesn't have to download the data again and just access previous called channels
 - Input supports channel IDs and YouTube URLs
 - Added `youtube-transcript-api` for transcript retrieval testing
+
+<b>FP5</b>
+- The Recent Videos table now supports:
+
+    - Clickable video titles that open the original YouTube video in a new tab
+    - Copy
+    - CSV export
+    - Excel (.xlsx) export
+    - PDF export
+    - Print
+- Exports include the currently searched/filtered rows across all DataTables pages and include a separate Video URL column.
+- Dark Mode
+    - The frontend includes a light/dark theme toggle in the top-right corner.
+
+    - The selected theme is saved in browser `localStorage`.
+    - Cards, forms, the Q&A area, DataTables controls, export buttons, and the video table follow the selected theme.
+    - The Chart.js posting-trend chart updates its text and grid colors immediately when the theme changes.
+
 
 ## Authors
 - Ashley Zenzola
@@ -126,11 +144,6 @@ The main analytics endpoint is:
 GET /api/channel/{channel_id}/analytics?limit=10
 ```
 
-## Transcript Testing
-```powershell
-.\.venv\Scripts\python.exe backend\transcript_service.py
-```
-
 ## Expected Input
 - YouTube channel ID or URL (Only the UC id at the moment)
 - User questions (Not Implemented Yet)
@@ -148,7 +161,7 @@ GET /api/channel/{channel_id}/analytics?limit=10
 - 
 
 ## Testing Evidence
--
+- 
 
 ## What each file does
 
