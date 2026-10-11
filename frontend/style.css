@@ -1,91 +1,180 @@
 /* Main page styling for the YouTube Channel Analyzer. */
 * { box-sizing: border-box; }
 
+/*
+    Theme variables make it possible to switch the whole page between
+    light and dark mode without duplicating every CSS rule.
+*/
+:root {
+    color-scheme: light;
+    --page-bg: #f4f6f8;
+    --surface: #ffffff;
+    --surface-secondary: #f7f7f7;
+    --surface-hover: #e5e5e5;
+    --text: #222222;
+    --muted: #666666;
+    --border: #dddddd;
+    --input-border: #bbbbbb;
+    --button-bg: #222222;
+    --button-text: #ffffff;
+    --link: #0b57d0;
+    --shadow: rgba(0, 0, 0, 0.08);
+    --success: #18794e;
+    --error: #b42318;
+    --error-bg: #fff0f0;
+    --error-border: #f0b5b5;
+    --chart-grid: rgba(0, 0, 0, 0.12);
+}
+
+/* Dark-mode values replace the variables above. */
+html.dark-mode {
+    color-scheme: dark;
+    --page-bg: #121212;
+    --surface: #1e1e1e;
+    --surface-secondary: #2a2a2a;
+    --surface-hover: #363636;
+    --text: #f1f1f1;
+    --muted: #b7b7b7;
+    --border: #454545;
+    --input-border: #5a5a5a;
+    --button-bg: #eeeeee;
+    --button-text: #171717;
+    --link: #8ab4f8;
+    --shadow: rgba(0, 0, 0, 0.35);
+    --success: #75d5a5;
+    --error: #ff9f98;
+    --error-bg: #3a1f1f;
+    --error-border: #784040;
+    --chart-grid: rgba(255, 255, 255, 0.16);
+}
+
 body {
     margin: 0;
     font-family: Arial, sans-serif;
-    background: #f4f6f8;
-    color: #222;
+    background: var(--page-bg);
+    color: var(--text);
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Centers the app and prevents it from becoming too wide. */
 .container { max-width: 1150px; margin: 0 auto; padding: 40px 20px; }
 h1 { margin-bottom: 8px; }
 h2, h3 { margin-top: 0; }
-.subtitle, .muted, .note, .metric-note { color: #666; }
+.subtitle, .muted, .note, .metric-note { color: var(--muted); }
 .subtitle { margin-top: 0; margin-bottom: 30px; }
 .note, .metric-note { font-size: 14px; }
 
-/* Reusable white panel used throughout the page. */
+/* Keeps the theme button in the top-right. */
+.page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    margin-top: 2px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 1px 4px var(--shadow);
+}
+
+.theme-toggle:hover {
+    background: var(--surface-secondary);
+    opacity: 1;
+}
+
+.theme-toggle:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: 2px;
+}
+
+/* Reusable panel used throughout the page. */
 .card {
-    background: white;
+    background: var(--surface);
     border-radius: 10px;
     padding: 24px;
     margin-bottom: 20px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 2px 8px var(--shadow);
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .status-card { padding: 16px 24px; }
 label { display: block; font-weight: bold; margin-bottom: 10px; }
 
-/* Put the input, dropdown, and button on the same row. */
+/* Put the input and button on the same row. */
 .search-row { display: flex; gap: 10px; }
-input, select { padding: 12px; border: 1px solid #bbb; border-radius: 6px; font-size: 16px; }
+input, select {
+    padding: 12px;
+    border: 1px solid var(--input-border);
+    border-radius: 6px;
+    font-size: 16px;
+    background: var(--surface);
+    color: var(--text);
+}
 input { flex: 1; }
-button { padding: 12px 18px; border: none; border-radius: 6px; background: #222; color: white; font-size: 16px; cursor: pointer; }
+input::placeholder { color: var(--muted); opacity: 1; }
+
+button {
+    padding: 12px 18px;
+    border: none;
+    border-radius: 6px;
+    background: var(--button-bg);
+    color: var(--button-text);
+    font-size: 16px;
+    cursor: pointer;
+}
 button:hover { opacity: 0.9; }
 button:disabled { cursor: not-allowed; opacity: 0.6; }
 
-/* RAG question and answer section */
-
-.question-row {
-    display: flex;
-    gap: 10px;
-}
-
-/* Styles the example questions */
-.example-questions {
-    margin-top: 15px;
-}
-
-.example-questions p {
-    margin-bottom: 8px;
-}
+/* RAG question and answer section. */
+.question-row { display: flex; gap: 10px; }
+.example-questions { margin-top: 15px; }
+.example-questions p { margin-bottom: 8px; }
 
 .example-question {
     margin-right: 8px;
     margin-bottom: 8px;
     padding: 8px 12px;
-    background: #f7f7f7;
-    color: black;
-    border: 1px solid #ccc;
+    background: var(--surface-secondary);
+    color: var(--text);
+    border: 1px solid var(--border);
     border-radius: 6px;
     cursor: pointer;
 }
 
 .example-question:hover {
-    background: #e5e5e5;
+    background: var(--surface-hover);
+    opacity: 1;
 }
 
-/* Styles the answer card */
 .answer-card {
     margin-top: 20px;
     padding: 18px;
-    background: #f7f7f7;
+    background: var(--surface-secondary);
     border-radius: 8px;
 }
+.answer-card h3 { margin-bottom: 8px; }
+.answer-card p { margin-bottom: 0; }
 
-.answer-card h3 {
-    margin-bottom: 8px;
+.success { color: var(--success); font-weight: bold; }
+.error { color: var(--error); font-weight: bold; }
+.error-message {
+    background: var(--error-bg);
+    border: 1px solid var(--error-border);
+    border-radius: 8px;
+    padding: 14px;
+    color: var(--error);
 }
-
-.answer-card p {
-    margin-bottom: 0;
-}
-
-.success { color: #18794e; font-weight: bold; }
-.error { color: #b42318; font-weight: bold; }
-.error-message { background: #fff0f0; border: 1px solid #f0b5b5; border-radius: 8px; padding: 14px; color: #b42318; }
 .loading { font-weight: bold; }
 
 /* JavaScript adds/removes this class to hide and show sections. */
@@ -97,27 +186,128 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 /* Statistic cards use CSS Grid. */
 .stats-grid { display: grid; gap: 12px; }
 .channel-grid, .analytics-grid { grid-template-columns: repeat(4, 1fr); }
-.stat { background: #f7f7f7; padding: 18px; border-radius: 8px; }
-.stat-label { display: block; color: #666; margin-bottom: 6px; font-size: 14px; }
+.stat { background: var(--surface-secondary); padding: 18px; border-radius: 8px; }
+.stat-label { display: block; color: var(--muted); margin-bottom: 6px; font-size: 14px; }
 .stat strong { font-size: 22px; }
 
 .top-videos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 18px; }
-.top-video-card { border: 1px solid #ddd; border-radius: 8px; padding: 18px; }
+.top-video-card { border: 1px solid var(--border); border-radius: 8px; padding: 18px; }
 .top-video-card strong, .top-video-card span { display: block; }
 .top-video-card strong { margin-bottom: 6px; }
 
-.chart-card { margin-top: 24px; border-top: 1px solid #ddd; padding-top: 20px; }
+.chart-card { margin-top: 24px; border-top: 1px solid var(--border); padding-top: 20px; }
 .chart-card canvas { max-height: 340px; }
 .metric-note { margin-bottom: 0; margin-top: 18px; }
 
 /* Allow the table to scroll horizontally on small screens. */
 .table-wrapper { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; }
-th, td { padding: 12px; border-bottom: 1px solid #ddd; text-align: left; vertical-align: top; }
-th { background: #f7f7f7; }
+table { width: 100%; border-collapse: collapse; color: var(--text); }
+th, td { padding: 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+th { background: var(--surface-secondary); }
 .video-cell { min-width: 280px; }
-.video-title { font-weight: bold; }
-.video-id { display: block; color: #777; font-size: 12px; margin-top: 4px; }
+.video-id { display: block; color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+/* Video titles are links to the original YouTube videos. */
+.video-title {
+    color: var(--link);
+    text-decoration: none;
+    font-weight: bold;
+}
+.video-title:hover,
+.video-title:focus { text-decoration: underline; }
+
+/*
+    DataTables creates its own controls around the table. These overrides
+    make the search field, page-size selector, paging controls, and export
+    buttons follow the current light/dark theme.
+*/
+.dt-container { color: var(--text) !important; }
+
+.dt-container .dt-search input,
+.dt-container .dt-length select {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--input-border);
+}
+
+.dt-container .dt-info,
+.dt-container .dt-length,
+.dt-container .dt-search {
+    color: var(--text) !important;
+}
+
+.dt-container .dt-paging .dt-paging-button {
+    color: var(--text) !important;
+    background: transparent !important;
+    border: 1px solid transparent !important;
+}
+
+.dt-container .dt-paging .dt-paging-button:hover:not(.disabled) {
+    color: var(--text) !important;
+    background: var(--surface-secondary) !important;
+    border-color: var(--border) !important;
+}
+
+.dt-container .dt-paging .dt-paging-button.current,
+.dt-container .dt-paging .dt-paging-button.current:hover {
+    color: var(--button-text) !important;
+    background: var(--button-bg) !important;
+    border-color: var(--button-bg) !important;
+}
+
+.dt-container .dt-paging .dt-paging-button.disabled {
+    color: var(--muted) !important;
+}
+
+/* DataTables export buttons. */
+div.dt-buttons > .dt-button,
+div.dt-buttons > div.dt-button-split .dt-button {
+    background: var(--surface-secondary) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 6px !important;
+}
+
+div.dt-buttons > .dt-button:hover:not(.disabled),
+div.dt-buttons > div.dt-button-split .dt-button:hover:not(.disabled) {
+    background: var(--surface-hover) !important;
+    color: var(--text) !important;
+    border-color: var(--input-border) !important;
+}
+
+/* DataTables adds its own table styles, so override them in dark mode. */
+html.dark-mode table.dataTable,
+html.dark-mode table.dataTable th,
+html.dark-mode table.dataTable td {
+    color: var(--text) !important;
+    border-color: var(--border) !important;
+}
+
+html.dark-mode table.dataTable thead th,
+html.dark-mode table.dataTable thead td {
+    background: var(--surface-secondary) !important;
+}
+
+html.dark-mode table.dataTable tbody tr,
+html.dark-mode table.dataTable tbody tr > * {
+    background: var(--surface) !important;
+    color: var(--text) !important;
+    box-shadow: none !important;
+}
+
+html.dark-mode table.dataTable tbody tr:hover,
+html.dark-mode table.dataTable tbody tr:hover > * {
+    background: var(--surface-secondary) !important;
+}
+
+/* Inputs in the per-column filter row. */
+.filter-row input {
+    width: 100%;
+    min-width: 110px;
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--input-border);
+}
 
 /* Responsive layouts for smaller screens. */
 @media (max-width: 900px) {
@@ -125,16 +315,14 @@ th { background: #f7f7f7; }
 }
 
 @media (max-width: 650px) {
-    .search-row {
-        flex-direction: column;
-    }
-    
-    /* Stacks the Q&A section vertically */
-    .question-row {
-        flex-direction: column;
-    }
+    .page-header { align-items: stretch; }
+    .theme-toggle { align-self: flex-start; }
+    .search-row { flex-direction: column; }
+    .question-row { flex-direction: column; }
+    .channel-grid, .analytics-grid, .top-videos { grid-template-columns: 1fr; }
+}
 
-    .channel-grid, .analytics-grid, .top-videos {
-        grid-template-columns: 1fr;
-    }
+@media (max-width: 480px) {
+    .page-header { flex-direction: column; }
+    .subtitle { margin-bottom: 10px; }
 }

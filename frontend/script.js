@@ -37,6 +37,11 @@ const mostLikedTitle = document.getElementById("mostLikedTitle");
 const mostLikedValue = document.getElementById("mostLikedValue");
 const videoTableBody = document.getElementById("videoTableBody");
 
+// Dark-mode toggle elements.
+const themeToggle = document.getElementById("themeToggle");
+const themeIcon = document.getElementById("themeIcon");
+const themeText = document.getElementById("themeText");
+
 // Gets references to the RAG question and answer elements
 const questionSection = document.getElementById("questionSection");
 const questionInput = document.getElementById("questionInput");
@@ -53,6 +58,53 @@ let uploadTrendChart = null;
 
 // Store the current DataTables object so it can be replace on the next search.
 let videoDataTable = null;
+
+// Returns true when the saved/active page theme is dark.
+function isDarkMode() {
+    return document.documentElement.classList.contains("dark-mode");
+}
+
+
+// Keep the button text, icon, and accessibility state in sync with the theme.
+function updateThemeToggle() {
+    const darkModeEnabled = isDarkMode();
+
+    themeIcon.textContent = darkModeEnabled ? "☀️" : "🌙";
+    themeText.textContent = darkModeEnabled ? "Light Mode" : "Dark Mode";
+    themeToggle.setAttribute("aria-pressed", String(darkModeEnabled));
+    themeToggle.setAttribute(
+        "aria-label",
+        darkModeEnabled ? "Switch to light mode" : "Switch to dark mode"
+    );
+}
+
+
+// Change Chart.js text/grid colors when the page theme changes.
+function applyChartTheme() {
+    if (!uploadTrendChart) return;
+
+    const styles = getComputedStyle(document.documentElement);
+    const textColor = styles.getPropertyValue("--text").trim();
+    const gridColor = styles.getPropertyValue("--chart-grid").trim();
+
+    uploadTrendChart.options.plugins.legend.labels.color = textColor;
+    uploadTrendChart.options.scales.x.ticks.color = textColor;
+    uploadTrendChart.options.scales.y.ticks.color = textColor;
+    uploadTrendChart.options.scales.x.grid.color = gridColor;
+    uploadTrendChart.options.scales.y.grid.color = gridColor;
+    uploadTrendChart.update();
+}
+
+
+// Switch themes and remember the user's choice in this browser.
+function toggleTheme() {
+    const darkModeEnabled = document.documentElement.classList.toggle("dark-mode");
+
+    localStorage.setItem("theme", darkModeEnabled ? "dark" : "light");
+    updateThemeToggle();
+    applyChartTheme();
+}
+
 
 async function checkBackendConnection() {
     try {
@@ -164,6 +216,11 @@ function displayUploadChart(monthData) {
 
     const canvas = document.getElementById("uploadTrendChart");
 
+    // Read the current CSS theme so Chart.js text/grid colors match the page.
+    const styles = getComputedStyle(document.documentElement);
+    const textColor = styles.getPropertyValue("--text").trim();
+    const gridColor = styles.getPropertyValue("--chart-grid").trim();
+
     uploadTrendChart = new Chart(canvas, {
         type: "bar",
         data: {
@@ -175,10 +232,31 @@ function displayUploadChart(monthData) {
         },
         options: {
             responsive: true,
+            plugins: {
+                legend: {
+                    labels: {
+                        color: textColor
+                    }
+                }
+            },
             scales: {
+                x: {
+                    ticks: {
+                        color: textColor
+                    },
+                    grid: {
+                        color: gridColor
+                    }
+                },
                 y: {
                     beginAtZero: true,
-                    ticks: { precision: 0 },
+                    ticks: {
+                        precision: 0,
+                        color: textColor
+                    },
+                    grid: {
+                        color: gridColor
+                    }
                 },
             },
         },
@@ -187,7 +265,8 @@ function displayUploadChart(monthData) {
 
 
 function displayVideos(videos) {
-    // If DataTables was already created from a previous search, destroy it before creating a new one.
+    // If DataTables was already created from a previous search,
+    // destroy it before changing the table rows.
     if (videoDataTable) {
         videoDataTable.destroy();
         videoDataTable = null;
@@ -199,7 +278,10 @@ function displayVideos(videos) {
     if (videos.length === 0) {
         const row = document.createElement("tr");
         const cell = document.createElement("td");
-        cell.colSpan = 6;
+
+        // There are now 7 table columns because the last one stores
+        // a hidden YouTube URL used by the export buttons.
+        cell.colSpan = 7;
         cell.textContent = "No public videos were returned.";
         row.appendChild(cell);
         videoTableBody.appendChild(row);
@@ -211,10 +293,18 @@ function displayVideos(videos) {
             const titleCell = document.createElement("td");
             titleCell.className = "video-cell";
 
-            const title = document.createElement("span");
+            // Build the normal YouTube watch URL from the video ID.
+            const videoUrl = `https://www.youtube.com/watch?v=${video.video_id}`;
+
+            // Make the video title clickable. It opens YouTube in a new tab.
+            const title = document.createElement("a");
             title.className = "video-title";
             title.textContent = video.title || "Untitled";
+            title.href = videoUrl;
+            title.target = "_blank";
+            title.rel = "noopener noreferrer";
 
+            // Keep the video ID visible below the title.
             const id = document.createElement("span");
             id.className = "video-id";
             id.textContent = video.video_id;
@@ -228,47 +318,149 @@ function displayVideos(videos) {
 
             const durationCell = document.createElement("td");
             durationCell.textContent = formatDuration(video.duration_seconds);
-            durationCell.setAttribute("data-order", video.duration_seconds);
+            durationCell.dataset.order = video.duration_seconds;
 
             const viewsCell = document.createElement("td");
             viewsCell.textContent = formatNumber(video.view_count);
+            viewsCell.dataset.order = video.view_count;
 
             const likesCell = document.createElement("td");
             likesCell.textContent = formatNumber(video.like_count);
+            likesCell.dataset.order = video.like_count;
 
             const commentsCell = document.createElement("td");
             commentsCell.textContent = formatNumber(video.comment_count);
+            commentsCell.dataset.order = video.comment_count;
 
-            row.append(titleCell, publishedCell, durationCell, viewsCell, likesCell, commentsCell);
+            // This seventh column is hidden on the webpage but included
+            // in exported CSV, Excel, PDF, Copy, and Print output.
+            const urlCell = document.createElement("td");
+            urlCell.textContent = videoUrl;
+
+            row.append(
+                titleCell,
+                publishedCell,
+                durationCell,
+                viewsCell,
+                likesCell,
+                commentsCell,
+                urlCell
+            );
+
             videoTableBody.appendChild(row);
         });
     }
 
-    // Create the new DataTable
+    // Export only rows that match the current DataTables search/filter.
+    // page: "all" means export every matching row, not just the current page.
+    const exportOptions = {
+        columns: [0, 1, 2, 3, 4, 5, 6],
+        modifier: {
+            search: "applied",
+            order: "applied",
+            page: "all"
+        },
+        format: {
+            body: function(data, row, column, node) {
+                // The visible Video cell contains both the title link and
+                // the video ID. Export only the readable title here because
+                // the full URL is exported in its own column.
+                if (column === 0) {
+                    const link = node.querySelector("a.video-title");
+                    return link ? link.textContent.trim() : node.textContent.trim();
+                }
+
+                return node.textContent.trim();
+            }
+        }
+    };
+
+    // Create the DataTable with filtering, sorting, pagination, and exports.
     videoDataTable = $("#videoTable").DataTable({
         pageLength: 10,
         lengthMenu: [10, 25, 50],
+
+        // Published defaults to newest first.
         order: [[1, "desc"]],
+
         columnDefs: [
             {
-                // Column 1 = Published
+                // Column 1 = Published.
                 targets: 1,
-                // Only switch between newest and oldest
+                // Only switch between newest and oldest.
                 orderSequence: ["desc", "asc"]
+            },
+            {
+                // Column 6 contains the full YouTube URL.
+                // Keep it out of the visible table, but available for export.
+                targets: 6,
+                visible: false,
+                searchable: false
             }
-        ],  
+        ],
+
+        // Keep the normal page-length control and add export buttons.
+        layout: {
+            topStart: ["pageLength", "buttons"],
+            topEnd: "search",
+            bottomStart: "info",
+            bottomEnd: "paging"
+        },
+
+        buttons: [
+            {
+                extend: "copyHtml5",
+                text: "Copy",
+                exportOptions: exportOptions
+            },
+            {
+                extend: "csvHtml5",
+                text: "CSV",
+                filename: "youtube-channel-videos",
+                exportOptions: exportOptions
+            },
+            {
+                extend: "excelHtml5",
+                text: "Excel",
+                filename: "youtube-channel-videos",
+                title: "YouTube Channel Videos",
+                exportOptions: exportOptions
+            },
+            {
+                extend: "pdfHtml5",
+                text: "PDF",
+                filename: "youtube-channel-videos",
+                title: "YouTube Channel Videos",
+                orientation: "landscape",
+                pageSize: "LETTER",
+                exportOptions: exportOptions
+            },
+            {
+                extend: "print",
+                text: "Print",
+                title: "YouTube Channel Videos",
+                exportOptions: exportOptions
+            }
+        ],
+
         // Prevent the second header row from becoming another sortable heading row.
         orderCellsTop: true
     });
 
-    // Connect the individual column filters
+    // Connect the individual column filters.
+    // The seventh URL column has no filter input and is hidden.
     $("#videoTable thead tr.filter-row th").each(function (columnIndex) {
-        $("input", this).off("keyup change").on("keyup change", function() {
-            videoDataTable.column(columnIndex).search(this.value).draw();
-        });
+        $("input", this)
+            .off("keyup change")
+            .on("keyup change", function() {
+                videoDataTable
+                    .column(columnIndex)
+                    .search(this.value)
+                    .draw();
+            });
     });
 
-    // Show the video section
+    // Show the video section.
     videosSection.classList.remove("hidden");
 }
 
@@ -413,6 +605,13 @@ channelInput.addEventListener("keydown", event => {
 questionInput.value = "";
 answerText.textContent = defaultAnswer;
 askQuestionButton.disabled = true;
+
+// Switch between light and dark mode when the theme button is clicked.
+themeToggle.addEventListener("click", toggleTheme);
+
+// The small script in index.html already restored the saved class before paint.
+// This updates the button label/icon to match that saved theme.
+updateThemeToggle();
 
 // Check FastAPI as soon as the page loads.
 checkBackendConnection();
