@@ -1,0 +1,17 @@
+[
+  {
+    "video_id": "test_video_1",
+    "title": "Python Introduction",
+    "transcript": "Python is a programming language commonly used for web development, automation, data analysis, and machine learning. Python is popular because its syntax is easy to read and it has many useful libraries."
+  },
+  {
+    "video_id": "test_video_2",
+    "title": "Machine Learning Introduction",
+    "transcript": "Machine learning allows computers to learn patterns from data. Supervised learning uses labeled training data while unsupervised learning attempts to discover patterns without predefined labels."
+  },
+  {
+    "video_id": "test_video_3",
+    "title": "Database Introduction",
+    "transcript": "SQLite is a lightweight relational database. Unlike database servers such as PostgreSQL, SQLite stores its database inside a local file. It is useful for smaller applications and caching."
+  }
+]
