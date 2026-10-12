@@ -59,6 +59,9 @@ let uploadTrendChart = null;
 // Store the current DataTables object so it can be replace on the next search.
 let videoDataTable = null;
 
+// Resolved UC channel ID used by the RAG question endpoint.
+let activeChannelId = null;
+
 // Returns true when the saved/active page theme is dark.
 function isDarkMode() {
     return document.documentElement.classList.contains("dark-mode");
@@ -470,6 +473,7 @@ async function analyzeChannel() {
     const channelId = channelInput.value.trim();
 
     // Hide previous results while the new request is running.
+    activeChannelId = null;
     errorMessage.classList.add("hidden");
     channelSection.classList.add("hidden");
     analyticsSection.classList.add("hidden");
@@ -515,6 +519,9 @@ async function analyzeChannel() {
         displayAnalytics(data.analytics);
         displayVideos(data.videos);
 
+        // Remember the resolved channel so questions use the same analysis.
+        activeChannelId = resolvedChannelId;
+
         // Shows the Q&A section after channel analysis
         questionSection.classList.remove("hidden");
 
@@ -537,8 +544,14 @@ async function askQuestion() {
         answerText.textContent = "Please enter a question.";
         return;
     }
+
+    // The question must belong to a channel that was successfully analyzed.
+    if (!activeChannelId) {
+        answerText.textContent = "Analyze a channel before asking a question.";
+        return;
+    }
     
-    answerText.textContent = "Loading answer...";
+    answerText.textContent = "Searching transcript context and generating an answer...";
     
     try {
         const response = await fetch("/api/question", {
@@ -548,6 +561,7 @@ async function askQuestion() {
             },
             
             body: JSON.stringify({
+                channel_id: activeChannelId,
                 question: question,
             }),
         });

@@ -45,6 +45,12 @@
     - The selected theme is saved in browser `localStorage`.
     - Cards, forms, the Q&A area, DataTables controls, export buttons, and the video table follow the selected theme.
     - The Chart.js posting-trend chart updates its text and grid colors immediately when the theme changes.
+- RAG implementation using a test file instead of actual transcripts (Youtube-transcript-api blocked me for too many request)
+    - use Gemini API: model gemini-3.8-flash
+    - FAISS implemented (find transcript chunks whose embeddings are most similar to the user's question embedding)
+    - At most only 3 videos (for testing): limit can be removed at later date
+- Add a test mode for RAG (to not hit transcript block)
+
 
 
 ## Authors
@@ -84,6 +90,7 @@ This is a web application that provides statistics, trends, and content analysis
 - Analyze video-posting trends
 - Process video transcripts
 - Allow users to ask questions about channel content
+- To test RAG: go to .env and change `RAG_TEST_MODE`=true 
 
 ## Scope
 - Analyze one channel at a time
@@ -144,15 +151,17 @@ The main analytics endpoint is:
 GET /api/channel/{channel_id}/analytics?limit=10
 ```
 
+
 ## Expected Input
-- YouTube channel ID or URL (Only the UC id at the moment)
-- User questions (Not Implemented Yet)
+- YouTube channel ID or URL
+- User questions (Testing phase only, blocked by Youtube-transcript-api for frequent request)
 
 ## Expected Output
 - Channel statistics
 - Video statistics
 - Posting trends
 - Answers to user questions
+- hyperlink videos
 
 ## Important Design Decisions
 - 
@@ -167,7 +176,12 @@ GET /api/channel/{channel_id}/analytics?limit=10
 
 - `backend/main.py` - FastAPI routes and application flow
 - `backend/youtube_service.py` - YouTube Data API communication
-- `backend/analytics_service.py` - statistics calculations with pandas
+- `backend/database_services.py` - Handles SQLite cache
+- `backend/analytics_service.py` - Statistics calculations with pandas
+- `backend/transcript_service.py` - Uses youtube-transcript-api to retreive transcript for a video
+- `backend/rag_service.py` - Takes transcripts, breaks them into chunks, creates embeddings with Sentence Transformers, builds the FAISS index, embeds the user's question, retrieves the most relevant transcript chunks, constructs the RAG prompt, and prepares sources for the answer.
+- `backend/llm_service.py` - Handles Gemini generation
+- `backend/requirements.txt` - Lists the Python libraries that need to be installed
 - `frontend/index.html` - page structure
 - `frontend/style.css` - appearance/layout
 - `frontend/script.js` - calls FastAPI and updates the page
