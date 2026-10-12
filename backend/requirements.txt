@@ -4,3 +4,6 @@ google-api-python-client
 python-dotenv
 pandas
 youtube-transcript-api
+sentence-transformers
+faiss-cpu
+google-genai

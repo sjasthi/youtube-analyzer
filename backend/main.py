@@ -1,5 +1,7 @@
 """Main FastAPI application for the YouTube Channel Analyzer."""
 
+import json # For testing RAG
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
@@ -19,6 +21,7 @@ from backend.database_service import (
 
 from backend.youtube_service import get_all_videos, resolve_channel_id
 from backend.transcript_service import get_video_transcripts
+from backend.rag_service import answer_question as run_rag_question
 
 # Create the FastAPI application.
 app = FastAPI(title="YouTube Channel Analyzer")
@@ -99,16 +102,150 @@ def resolve_channel(channel_input: str):
 
     return {"channel_id": channel_id}
 
-# Defines the JSON structure for the temporary Q&A endpoint.
+# Defines the JSON structure sent by the frontend Q&A form.
 class QuestionRequest(BaseModel):
+    channel_id: str
     question: str
+
+
+# TEMPORARY integration limit while transcript retrieval/caching is developed
+# separately. Once cached transcripts are available, this endpoint can pass all
+# cached transcripts into rag_service without changing the RAG implementation.
+RAG_TRANSCRIPT_VIDEO_LIMIT = int(os.getenv("RAG_TRANSCRIPT_VIDEO_LIMIT", "3"))
+
+# When True, RAG uses local test transcripts instead of contacting YouTube.
+RAG_TEST_MODE = os.getenv(
+    "RAG_TEST_MODE",
+    "false",
+).lower() == "true"
+
+# Location of the local transcript test data.
+TEST_TRANSCRIPTS_FILE = BASE_DIR / "data" / "test_transcripts.json"
+
+# Temporary in-memory transcript cache for the RAG branch.
+#
+# Why this exists:
+# The transcript library makes network requests to YouTube. Re-fetching the
+# same three transcripts every time a user asks another question is wasteful
+# and can increase the chance of YouTube rate/IP blocking. This cache keeps
+# successful transcript results for the lifetime of the FastAPI process.
+#
+# Once the teammate's SQLite transcript cache is merged, this dictionary can
+# be removed and the RAG endpoint can read transcripts from SQLite instead.
+RAG_TRANSCRIPT_CACHE = {}
+
+# For Testing RAG without transcripts
+def load_test_transcripts():
+    """Load local transcript data for testing the RAG pipeline."""
+
+    if not TEST_TRANSCRIPTS_FILE.exists():
+        raise RuntimeError(
+            f"Test transcript file was not found: "
+            f"{TEST_TRANSCRIPTS_FILE}"
+        )
+
+    with open(
+        TEST_TRANSCRIPTS_FILE,
+        "r",
+        encoding="utf-8",
+    ) as file:
+        transcripts = json.load(file)
+
+    if not isinstance(transcripts, list):
+        raise RuntimeError(
+            "test_transcripts.json must contain a JSON list."
+        )
+
+    return transcripts
+
+
+def get_rag_transcripts(channel_id, videos):
+    """Return either local test transcripts or live YouTube transcripts."""
+
+    # TEST MODE:
+    # Do not contact YouTube's transcript service.
+    if RAG_TEST_MODE:
+        transcripts = load_test_transcripts()
+        return transcripts, "test_file"
+
+    # NORMAL MODE:
+    # Check the temporary in-memory transcript cache first.
+    video_ids = tuple(video["video_id"] for video in videos)
+    cache_key = (channel_id, video_ids)
+
+    cached = RAG_TRANSCRIPT_CACHE.get(cache_key)
+
+    if cached is not None:
+        return cached, "memory_cache"
+
+    # Only contact YouTube when nothing is cached.
+    transcripts = get_video_transcripts(videos)
+
+    if transcripts:
+        RAG_TRANSCRIPT_CACHE[cache_key] = transcripts
+
+    return transcripts, "youtube"
 
 
 @app.post("/api/question")
 def ask_question(request: QuestionRequest):
-    """Temporary endpoint; the real RAG pipeline will replace this later."""
+    """Run transcript retrieval + FAISS search + optional Gemini generation.
+
+    This currently uses the existing transcript service as an adapter. The RAG
+    module itself is independent of transcript storage, so a teammate can replace
+    this adapter with SQLite-cached transcripts later.
+    """
+    question = request.question.strip()
+    channel_id = request.channel_id.strip()
+
+    if not question:
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
+    if not channel_id:
+        raise HTTPException(status_code=400, detail="Channel ID is required.")
+
+    try:
+        result = get_channel_data(channel_id)
+    except RuntimeError as error:
+        raise HTTPException(status_code=500, detail=str(error))
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Channel request failed: {error}",
+        )
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="YouTube channel was not found.")
+
+    # Keep transcript work small while the transcript-caching branch is being
+    # developed. Change/remove this slice after that work is merged.
+    videos = result["videos"][:RAG_TRANSCRIPT_VIDEO_LIMIT]
+    transcripts, transcript_source = get_rag_transcripts(channel_id, videos)
+
+    if not transcripts:
+        raise HTTPException(
+            status_code=404,
+            detail="No transcripts were available for the videos being indexed.",
+        )
+
+    try:
+        rag_result = run_rag_question(
+            channel_id=channel_id,
+            question=question,
+            transcripts=transcripts,
+        )
+    except (RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=500, detail=str(error))
+
+    # The prompt is an internal handoff for the future LLM provider, not data the
+    # browser needs to display.
+    rag_result.pop("rag_prompt", None)
+
     return {
-        "answer": "API: RAG answer will be connected here."
+        **rag_result,
+        "transcript_count": len(transcripts),
+        "indexed_video_count": len(videos),
+        "transcript_source": transcript_source,
     }
 
 

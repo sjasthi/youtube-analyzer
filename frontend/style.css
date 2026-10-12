@@ -164,7 +164,7 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
     border-radius: 8px;
 }
 .answer-card h3 { margin-bottom: 8px; }
-.answer-card p { margin-bottom: 0; }
+.answer-card p { margin-bottom: 0; white-space: pre-wrap; }
 
 .success { color: var(--success); font-weight: bold; }
 .error { color: var(--error); font-weight: bold; }
