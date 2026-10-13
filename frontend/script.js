@@ -47,6 +47,7 @@ const questionSection = document.getElementById("questionSection");
 const questionInput = document.getElementById("questionInput");
 const askQuestionButton = document.getElementById("askQuestionButton");
 const answerText = document.getElementById("answerText");
+const answerSources = document.getElementById("answerSources");
 const clearQuestionButton = document.getElementById("clearQuestionButton");
 const exampleQuestions = document.querySelectorAll(".example-question");
 
@@ -573,9 +574,31 @@ async function askQuestion() {
         }
 
         answerText.textContent = data.answer;
+        
+        // Displays the source videos used to answer the question
+        answerSources.innerHTML = "";
+        
+        // Creates links to the source videos, or displays a message if none are found
+        if (data.sources && data.sources.length > 0) {
+            data.sources.forEach((source) => {
+                const listItem = document.createElement("li");
+                const link = document.createElement("a");
+
+                link.href = source.video_url;
+                link.textContent = source.title;
+                link.target = "_blank";
+                link.rel = "noopener noreferrer";
+
+                listItem.appendChild(link);
+                answerSources.appendChild(listItem);
+            });
+        } else {
+            answerSources.innerHTML = "<li>No source videos were found.</li>";
+        }
 
     } catch (error) {
         answerText.textContent = `Error: ${error.message}`;
+        answerSources.innerHTML = "<li>Sources are unavailable.</li>";
     }
 }
 

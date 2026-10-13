@@ -208,6 +208,10 @@ def retrieve_relevant_chunks(
         if chunk_index < 0:
             continue
 
+        # Skips transcript chunks below the minimum relevance score
+        if float(score) < MIN_RELEVANCE_SCORE:
+            continue
+
         chunk = chunks[int(chunk_index)]
         results.append(
             {

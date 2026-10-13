@@ -179,7 +179,8 @@ def get_rag_transcripts(channel_id, videos):
         return cached, "memory_cache"
 
     # Only contact YouTube when nothing is cached.
-    transcripts = get_video_transcripts(videos)
+    # ORIGINAL: transcripts = get_video_transcripts(videos)
+    transcripts = get_video_transcripts(videos, channel_id)
 
     if transcripts:
         RAG_TRANSCRIPT_CACHE[cache_key] = transcripts
@@ -338,7 +339,6 @@ def get_channel_analytics(
     }
 
 
-# FIXME: Transcript Testing (Will edit more later)
 @app.get("/api/channel/{channel_id}/transcripts")
 def get_channel_transcripts(channel_id: str):
     """Return available transcripts for a channel's videos."""
@@ -370,7 +370,7 @@ def get_channel_transcripts(channel_id: str):
         print(video["video_id"], video["title"])
 
     # Retrieves transcripts for the test videos
-    transcripts = get_video_transcripts(videos)
+    transcripts = get_video_transcripts(videos, channel_id)
 
     return {
         "transcripts": transcripts,

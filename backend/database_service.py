@@ -81,6 +81,24 @@ def initialize_database():
 
             CREATE INDEX IF NOT EXISTS idx_videos_published_at
                 ON videos(published_at);
+
+            -- Stores video transcripts so they can be reused without fetching them again
+            CREATE TABLE IF NOT EXISTS transcripts (
+                video_id TEXT PRIMARY KEY,
+                channel_id TEXT NOT NULL,
+                transcript TEXT NOT NULL,
+                language TEXT,
+                last_updated TEXT NOT NULL,
+                FOREIGN KEY (video_id)
+                    REFERENCES videos(video_id)
+                    ON DELETE CASCADE,
+                FOREIGN KEY (channel_id)
+                    REFERENCES channels(channel_id)
+                    ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_transcripts_channel_id
+                ON transcripts(channel_id);
             """
         )
 
@@ -297,6 +315,48 @@ def is_cache_fresh(channel_id, max_age_minutes=CACHE_MAX_AGE_MINUTES):
 
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
     return last_updated >= cutoff
+
+
+# Saves a video transcript so it can be reused later
+def save_transcript(video_id, channel_id, transcript, language = None):
+    """Save a video transcript to the database."""
+
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT OR REPLACE INTO transcripts (
+                video_id,
+                channel_id,
+                transcript,
+                language,
+                last_updated
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                video_id,
+                channel_id,
+                transcript,
+                language,
+                datetime.now().isoformat(),
+            ),
+        )
+
+
+# Retrieves a saved transcript using its video ID
+def get_saved_transcript(video_id):
+    """Retrieve a saved transcript from the database."""
+
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT * FROM transcripts WHERE video_id = ?",
+            (video_id,),
+        ).fetchone()
+
+    if row is None:
+        return None
+
+    return dict(row)
 
 
 def get_database_stats():
