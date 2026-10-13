@@ -50,8 +50,10 @@
     - FAISS implemented (find transcript chunks whose embeddings are most similar to the user's question embedding)
     - At most only 3 videos (for testing): limit can be removed at later date
 - Add a test mode for RAG (to not hit transcript block)
-
-
+- Added transcript retrieval
+- Saved retrieved transcripts in the SQLite database for reuse
+- Added source video links to answers
+- Filtered out less relevant transcript chunks
 
 ## Authors
 - Ashley Zenzola
