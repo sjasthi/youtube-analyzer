@@ -49,7 +49,7 @@ CHROMA_COLLECTION_NAME = os.getenv(
 DEFAULT_CHUNK_SIZE_WORDS = 180
 DEFAULT_CHUNK_OVERLAP_WORDS = 40
 DEFAULT_TOP_K = 3
-MIN_RELEVANCE_SCORE = 0.20
+MIN_RELEVANCE_SCORE = float(os.getenv("RAG_MIN_RELEVANCE_SCORE", "-1.0"))
 CHROMA_UPSERT_BATCH_SIZE = 200
 RAG_METADATA_VERSION = 3
 CHUNKING_VERSION = os.getenv("RAG_CHUNKING_VERSION", "v1")
@@ -562,6 +562,47 @@ def index_transcripts(
     }
 
 
+def _get_chroma_distance_space(collection) -> str:
+    """Return the distance metric used by an existing Chroma collection.
+
+    Older project versions created the collection with Chroma's default L2
+    distance. Newer versions request cosine distance. get_or_create_collection
+    does not change the metric of an already-existing collection, so retrieval
+    must support both without forcing users to rebuild their RAG database.
+    """
+    metadata = getattr(collection, "metadata", None) or {}
+    legacy_space = metadata.get("hnsw:space")
+    if legacy_space in {"l2", "cosine", "ip"}:
+        return str(legacy_space)
+
+    model = getattr(collection, "_model", None)
+    configuration = getattr(model, "configuration_json", None) or {}
+    for index_name in ("hnsw", "spann"):
+        index_config = configuration.get(index_name) or {}
+        space = index_config.get("space")
+        if space in {"l2", "cosine", "ip"}:
+            return str(space)
+
+    # Chroma defaults to squared L2 distance when no metric was configured.
+    return "l2"
+
+
+def _distance_to_similarity(distance: float, distance_space: str) -> float:
+    """Convert Chroma distance to cosine-like similarity for normalized vectors."""
+    clean_distance = float(distance)
+
+    if distance_space == "l2":
+        # All project embeddings are normalized. For unit vectors:
+        # squared L2 distance = 2 - 2 * cosine_similarity.
+        score = 1.0 - (clean_distance / 2.0)
+    else:
+        # Chroma cosine distance and inner-product distance are both 1 - score
+        # for the normalized embeddings used by this project.
+        score = 1.0 - clean_distance
+
+    return max(-1.0, min(1.0, score))
+
+
 def retrieve_relevant_chunks(
     channel_id: str,
     question: str,
@@ -602,6 +643,8 @@ def retrieve_relevant_chunks(
         show_progress_bar=False,
     ).astype("float32")
 
+    distance_space = _get_chroma_distance_space(collection)
+
     query_result = collection.query(
         query_embeddings=question_embedding.tolist(),
         n_results=requested_k,
@@ -617,7 +660,11 @@ def retrieve_relevant_chunks(
 
     for document, metadata, distance in zip(documents, metadatas, distances):
         metadata = metadata or {}
-        score = 1.0 - float(distance)
+        score = _distance_to_similarity(float(distance), distance_space)
+        # By default RAG_MIN_RELEVANCE_SCORE=-1 disables hard filtering and
+        # uses Chroma's nearest neighbors. This avoids empty answers caused by
+        # metric differences or an overly strict threshold. Set the environment
+        # value to 0.20 (or another score) only if thresholding is desired.
         if score < MIN_RELEVANCE_SCORE:
             continue
 

@@ -30,27 +30,18 @@
                 <h1>YouTube Channel Analyzer</h1>
                 <p class="subtitle">Analyze public channel information, recent videos, and posting trends.</p>
             </div>
-            
-            <!-- Accessibility controls: text size and theme -->
-            <div class = "header-controls">
-                <div class = "text-size-controls" role = "group" aria-label = "Text size controls">
-                    <button id = "decreaseTextSize" type = "button" aria-label = "Decrease text size" title = "Decrease text size">A−</button>
-                    <button id = "resetTextSize" type = "button" aria-label = "Reset text size" title = "Reset text size">A</button>
-                    <button id = "increaseTextSize" type = "button" aria-label = "Increase text size" title = "Increase text size">A+</button>
-                </div>
 
-                <!-- Theme toggle stays in the top-right of the application. -->
-                <button
-                    id = "themeToggle"
-                    class = "theme-toggle"
-                    type = "button"
-                    aria-label = "Switch to dark mode"
-                    aria-pressed = "false"
-                >
-                    <span id = "themeIcon" aria-hidden="true">🌙</span>
-                    <span id = "themeText">Dark Mode</span>
-                </button>
-            </div>
+            <!-- Theme toggle stays in the top-right of the application. -->
+            <button
+                id="themeToggle"
+                class="theme-toggle"
+                type="button"
+                aria-label="Switch to dark mode"
+                aria-pressed="false"
+            >
+                <span id="themeIcon" aria-hidden="true">🌙</span>
+                <span id="themeText">Dark Mode</span>
+            </button>
         </header>
 
         <!-- Search controls -->
@@ -70,9 +61,7 @@
         </section>
 
         <!-- Hidden until JavaScript needs them. -->
-        <p id="loadingMessage" class="loading hidden" role="status" aria-live="polite">
-            Loading channel information and analyzing videos. This may take a while for channels with many videos.
-        </p>
+        <p id="loadingMessage" class="loading hidden">Loading and analyzing YouTube channel data...</p>
         <p id="errorMessage" class="error-message hidden"></p>
 
         <!-- Channel summary. JavaScript fills in these values. -->
@@ -95,149 +84,122 @@
 
         <!-- Analytics calculated by Python/pandas. -->
         <section id="analyticsSection" class="card hidden">
-            <button type="button" class="section-toggle" aria-expanded="true" aria-controls="analyticsContent">
-                <span>Video Sample Analytics</span>
-                <span class="toggle-icon" aria-hidden="true">−</span>
-            </button>
-            
-            <div id="analyticsContent" class="collapsible-content">
-                <div class="stats-grid analytics-grid">
-                    <div class="stat"><span class="stat-label">Average Views</span><strong id="averageViews">0</strong></div>
-                    <div class="stat"><span class="stat-label">Average Likes</span><strong id="averageLikes">0</strong></div>
-                    <div class="stat"><span class="stat-label">Average Comments</span><strong id="averageComments">0</strong></div>
-                    <div class="stat"><span class="stat-label">Average Length</span><strong id="averageDuration">0:00</strong></div>
-                    <div class="stat"><span class="stat-label">Sample Total Views</span><strong id="sampleTotalViews">0</strong></div>
-                    <div class="stat"><span class="stat-label">Engagement Rate</span><strong id="engagementRate">0%</strong></div>
-                    <div class="stat"><span class="stat-label">Avg. Days Between Uploads</span><strong id="averageDaysBetweenUploads">N/A</strong></div>
-                    <div class="stat"><span class="stat-label">Est. Uploads / Month</span><strong id="uploadsPerMonth">N/A</strong></div>
-                </div>
-                
-                <!-- Best-performing videos in the retrieved sample. -->
-                <div class="top-videos">
-                    <div class="top-video-card">
-                        <span class="stat-label">Most Viewed in Sample</span>
-                        <strong id="mostViewedTitle">N/A</strong>
-                        <span id="mostViewedValue" class="muted"></span>
-                    </div>
-                    <div class="top-video-card">
-                        <span class="stat-label">Most Liked in Sample</span>
-                        <strong id="mostLikedTitle">N/A</strong>
-                        <span id="mostLikedValue" class="muted"></span>
-                    </div>
-                </div>
+            <h2>Video Sample Analytics</h2>
 
-                <!-- Chart.js draws inside this canvas. -->
-                <div class="chart-card">
-                    <h3>Posting Trend</h3>
-                    <canvas id="uploadTrendChart"></canvas>
-                </div>
-                
-                <p class="metric-note">Engagement rate = (likes + comments) ÷ views × 100 for the retrieved sample.</p>
+            <div class="stats-grid analytics-grid">
+                <div class="stat"><span class="stat-label">Average Views</span><strong id="averageViews">0</strong></div>
+                <div class="stat"><span class="stat-label">Average Likes</span><strong id="averageLikes">0</strong></div>
+                <div class="stat"><span class="stat-label">Average Comments</span><strong id="averageComments">0</strong></div>
+                <div class="stat"><span class="stat-label">Average Length</span><strong id="averageDuration">0:00</strong></div>
+                <div class="stat"><span class="stat-label">Sample Total Views</span><strong id="sampleTotalViews">0</strong></div>
+                <div class="stat"><span class="stat-label">Engagement Rate</span><strong id="engagementRate">0%</strong></div>
+                <div class="stat"><span class="stat-label">Avg. Days Between Uploads</span><strong id="averageDaysBetweenUploads">N/A</strong></div>
+                <div class="stat"><span class="stat-label">Est. Uploads / Month</span><strong id="uploadsPerMonth">N/A</strong></div>
             </div>
+
+            <!-- Best-performing videos in the retrieved sample. -->
+            <div class="top-videos">
+                <div class="top-video-card">
+                    <span class="stat-label">Most Viewed in Sample</span>
+                    <strong id="mostViewedTitle">N/A</strong>
+                    <span id="mostViewedValue" class="muted"></span>
+                </div>
+                <div class="top-video-card">
+                    <span class="stat-label">Most Liked in Sample</span>
+                    <strong id="mostLikedTitle">N/A</strong>
+                    <span id="mostLikedValue" class="muted"></span>
+                </div>
+            </div>
+
+            <!-- Chart.js draws inside this canvas. -->
+            <div class="chart-card">
+                <h3>Posting Trend</h3>
+                <canvas id="uploadTrendChart"></canvas>
+            </div>
+
+            <p class="metric-note">Engagement rate = (likes + comments) ÷ views × 100 for the retrieved sample.</p>
         </section>
         
         <!-- Ask questions about the channel -->
         <section id = "questionSection" class = "card hidden">
-            <button type="button" class="section-toggle" aria-expanded="true" aria-controls="questionContent">
-                <span>Enter a Question</span>
-                <span class="toggle-icon" aria-hidden="true">−</span>
-            </button>
+            <h2>Enter a Question</h2>
+            <p class = "note">Ask questions using transcript content that has already been indexed in Chroma.</p>
 
-            <div id="questionContent" class="collapsible-content">
-                <p class = "note">Ask questions using transcript content that has already been indexed in Chroma.</p>
+            <div class="rag-index-row">
+                <button id="indexRagButton" type="button">Index RAG Content</button>
+                <span class="note">Indexing retrieves only missing transcripts. Asking questions does not contact YouTube.</span>
+            </div>
+
+            <div class = "question-row">
+                <input
+                    id = "questionInput"
+                    type = "text"
+                    placeholder = "Example: What topics are discussed in these videos?"
+                >
+                <button id = "askQuestionButton">Ask Question</button>
+                <button id = "clearQuestionButton">Clear</button>
+            </div>
+            
+            <div class = "example-questions">
+                <p>Example Questions:</p>
+                <button class = "example-question">
+                    What topics are discussed in these videos?
+                </button>
                 
-                <div class="rag-index-row">
-                    <button id="indexRagButton" type="button">Index RAG Content</button>
-                    <span class="note">Indexing retrieves only missing transcripts. Asking questions does not contact YouTube.</span>
-                </div>
+                <button class = "example-question">
+                    What is the most recent video about?
+                </button>
                 
-                <div class = "question-row">
-                    <input
-                        id = "questionInput"
-                        type = "text"
-                        placeholder = "Example: What topics are discussed in these videos?"
-                    >
-                    <button id = "askQuestionButton">Ask Question</button>
-                    <button id = "clearQuestionButton">Clear</button>
-                </div>
-                
-                <div class = "example-questions">
-                    <p>Example Questions:</p>
-                    <button class = "example-question">
-                        What topics are discussed in these videos?
-                    </button>
-                    
-                    <button class = "example-question">
-                        What is the most recent video about?
-                    </button>
-                    
-                    <button class = "example-question">
-                        What topics do these videos have in common?
-                    </button>
-                </div>
-                
-                <div
-                    id="transcriptStatus"
-                    class="transcript-status hidden"
-                    role="status"
-                    aria-live="polite"
-                ></div>
-                
-                <div class = "answer-card">
-                    <h3>Answer</h3>
-                    <p id = "answerText">The answer will appear here.</p>
-                </div>
-                
-                <div class="answer-card">
-                    <h3>Source Videos</h3>
-                    <ul id="answerSources">
-                        <li>Sources will appear here after you ask a question.</li>
-                    </ul>
-                </div>
+                <button class = "example-question">
+                    What topics do these videos have in common?
+                </button>
+            </div>
+
+            <div
+                id="transcriptStatus"
+                class="transcript-status hidden"
+                role="status"
+                aria-live="polite"
+            ></div>
+
+            <div class = "answer-card">
+                <h3>Answer</h3>
+                <p id = "answerText">The answer will appear here.</p>
+            </div>
+            
+            <div class="answer-card">
+                <h3>Source Videos</h3>
+                <ul id="answerSources">
+                    <li>Sources will appear here after you ask a question.</li>
+                </ul>
             </div>
         </section>
 
         <!-- Recent-video table. JavaScript creates the table rows. -->
         <section id="videosSection" class="card hidden">
-            <button type="button" class="section-toggle" aria-expanded="true" aria-controls="videosContent">
-                <span>Recent Videos</span>
-                <span class="toggle-icon" aria-hidden="true">−</span>
-            </button>
+            <h2>Recent Videos</h2>
+            <div class="table-wrapper">
+                <table id ="videoTable">
+                    <thead>
+                        <tr>
+                            <th>Video</th><th>Published</th><th>Length</th><th>Views</th><th>Likes</th><th>Comments</th><th>Video URL</th>
+                        </tr>
 
-            <div id="videosContent" class="collapsible-content">
-                <div class="table-wrapper">
-                    <table id ="videoTable">
-                        <thead>
-                            <tr>
-                                <th>Video</th>
-                                <th>Published</th>
-                                <th>Length</th>
-                                <th>Views</th>
-                                <th>Likes</th>
-                                <th>Comments</th>
-                                <th>Video URL</th>
-                            </tr>
-                            
-                            <tr class="filter-row">
-                                <th><input type="text" placeholder="Filter title"></th>
-                                <th><input type="text" placeholder="Filter date"></th>
-                                <th><input type="text" placeholder="Filter length"></th>
-                                <th><input type="text" placeholder="Filter views"></th>
-                                <th><input type="text" placeholder="Filter likes"></th>
-                                <th><input type="text" placeholder="Filter comments"></th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="videoTableBody"></tbody>
-                    </table>
-                </div>
+                        <tr class="filter-row">
+                            <th><input type="text" placeholder="Filter title"></th>
+                            <th><input type="text" placeholder="Filter date"></th>
+                            <th><input type="text" placeholder="Filter length"></th>
+                            <th><input type="text" placeholder="Filter views"></th>
+                            <th><input type="text" placeholder="Filter likes"></th>
+                            <th><input type="text" placeholder="Filter comments"></th>
+                            <th></th>
+                        </tr>
+                    </thead>
+
+                    <tbody id="videoTableBody"></tbody>
+                </table>
             </div>
         </section>
-
-        <!-- Back to Top button -->
-        <button id = "backToTopButton" type = "button" aria-label = "Back to top" title = "Back to top">
-            <span class = "arrow-up"></span>
-        </button>
     </main>
     <!-- Allows us to use jQuery from the internet -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
