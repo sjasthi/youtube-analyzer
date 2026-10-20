@@ -46,8 +46,10 @@ const themeText = document.getElementById("themeText");
 const questionSection = document.getElementById("questionSection");
 const questionInput = document.getElementById("questionInput");
 const askQuestionButton = document.getElementById("askQuestionButton");
+const indexRagButton = document.getElementById("indexRagButton");
 const answerText = document.getElementById("answerText");
 const answerSources = document.getElementById("answerSources");
+const transcriptStatus = document.getElementById("transcriptStatus");
 const clearQuestionButton = document.getElementById("clearQuestionButton");
 const exampleQuestions = document.querySelectorAll(".example-question");
 
@@ -474,12 +476,20 @@ async function analyzeChannel() {
     const channelId = channelInput.value.trim();
 
     // Hide previous results while the new request is running.
+    // Also clear the previous channel's question so it does not carry over
+    // when a different channel is analyzed.
     activeChannelId = null;
+    questionInput.value = "";
+    answerText.textContent = defaultAnswer;
+    answerSources.innerHTML = "<li>Sources will appear here after you ask a question.</li>";
+    askQuestionButton.disabled = true;
     errorMessage.classList.add("hidden");
     channelSection.classList.add("hidden");
     analyticsSection.classList.add("hidden");
     videosSection.classList.add("hidden");
     questionSection.classList.add("hidden");
+    transcriptStatus.textContent = "";
+    transcriptStatus.className = "transcript-status hidden";
 
     if (channelId === "") {
         errorMessage.textContent = "Please enter a YouTube channel ID or URL.";
@@ -523,8 +533,11 @@ async function analyzeChannel() {
         // Remember the resolved channel so questions use the same analysis.
         activeChannelId = resolvedChannelId;
 
-        // Shows the Q&A section after channel analysis
+        // Shows the Q&A section after channel analysis. RAG indexing is a
+        // separate user action, so channel analysis itself does not retrieve
+        // transcripts.
         questionSection.classList.remove("hidden");
+        await refreshRagCoverage();
 
     } catch (error) {
         errorMessage.textContent = `Error: ${error.message}`;
@@ -535,6 +548,108 @@ async function analyzeChannel() {
         analyzeButton.disabled = false;
     }
 }
+
+// Show how much RAG content is already stored for the active channel.
+async function refreshRagCoverage() {
+    if (!activeChannelId) return;
+
+    try {
+        const response = await fetch(
+            `/api/rag/stats?channel_id=${encodeURIComponent(activeChannelId)}`
+        );
+        const data = await response.json();
+
+        if (!response.ok) return;
+
+        const videoCount = data.video_count || 0;
+        const chunkCount = data.chunk_count || 0;
+
+        if (videoCount > 0) {
+            displayTranscriptStatus({
+                severity: "success",
+                message: `RAG already has ${videoCount} indexed video${videoCount === 1 ? "" : "s"} (${chunkCount} transcript chunks) for this channel.`,
+            });
+        } else {
+            displayTranscriptStatus({
+                severity: "info",
+                message: "No transcript content is indexed for RAG yet. Click 'Index RAG Content' when you are ready to retrieve/index transcripts.",
+            });
+        }
+    } catch (error) {
+        // RAG stats are informational; channel analysis should still work if
+        // this optional check fails.
+        console.warn("Unable to read RAG coverage:", error);
+    }
+}
+
+
+// Explicitly retrieve/index missing transcript content for this channel.
+async function indexRagContent() {
+    if (!activeChannelId) {
+        displayTranscriptStatus({
+            severity: "warning",
+            message: "Analyze a channel before indexing RAG content.",
+        });
+        return;
+    }
+
+    const originalText = indexRagButton.textContent;
+    indexRagButton.disabled = true;
+    indexRagButton.textContent = "Indexing...";
+
+    displayTranscriptStatus({
+        severity: "info",
+        message: "Indexing missing transcript content. Cached SQLite/Chroma data will be reused first.",
+    });
+
+    try {
+        const response = await fetch("/api/rag/index", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                channel_id: activeChannelId,
+            }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.detail || "Unable to index RAG content.");
+        }
+
+        displayTranscriptStatus(data.transcript_status);
+    } catch (error) {
+        displayTranscriptStatus({
+            severity: "warning",
+            message: `RAG indexing error: ${error.message}`,
+        });
+    } finally {
+        indexRagButton.disabled = false;
+        indexRagButton.textContent = originalText;
+    }
+}
+
+
+// Displays transcript indexing progress or a friendly block warning.
+function displayTranscriptStatus(status) {
+    if (!status || !status.message) {
+        transcriptStatus.textContent = "";
+        transcriptStatus.className = "transcript-status hidden";
+        return;
+    }
+
+    transcriptStatus.textContent = status.message;
+    transcriptStatus.className = "transcript-status";
+
+    if (status.severity === "warning") {
+        transcriptStatus.classList.add("warning");
+    } else if (status.severity === "success") {
+        transcriptStatus.classList.add("success");
+    }
+}
+
 
 // Handles the Ask Question button
 async function askQuestion() {
@@ -552,7 +667,9 @@ async function askQuestion() {
         return;
     }
     
-    answerText.textContent = "Searching transcript context and generating an answer...";
+    answerText.textContent = "Searching indexed transcript context and generating an answer...";
+    transcriptStatus.textContent = "Searching existing Chroma transcript content...";
+    transcriptStatus.className = "transcript-status";
     
     try {
         const response = await fetch("/api/question", {
@@ -574,6 +691,7 @@ async function askQuestion() {
         }
 
         answerText.textContent = data.answer;
+        displayTranscriptStatus(data.transcript_status);
         
         // Displays the source videos used to answer the question
         answerSources.innerHTML = "";
@@ -590,6 +708,28 @@ async function askQuestion() {
                 link.rel = "noopener noreferrer";
 
                 listItem.appendChild(link);
+
+                const details = [];
+                if (source.start_time !== null && source.start_time !== undefined) {
+                    details.push(`timestamp ${formatDuration(source.start_time)}`);
+                }
+                if (source.language) {
+                    details.push(`language ${source.language}`);
+                }
+                if (source.published_at) {
+                    details.push(`published ${formatDate(source.published_at)}`);
+                }
+                if (source.duration_seconds !== null && source.duration_seconds !== undefined) {
+                    details.push(`duration ${formatDuration(source.duration_seconds)}`);
+                }
+
+                if (details.length > 0) {
+                    const metadata = document.createElement("span");
+                    metadata.className = "source-meta";
+                    metadata.textContent = ` — ${details.join(" • ")}`;
+                    listItem.appendChild(metadata);
+                }
+
                 answerSources.appendChild(listItem);
             });
         } else {
@@ -599,10 +739,16 @@ async function askQuestion() {
     } catch (error) {
         answerText.textContent = `Error: ${error.message}`;
         answerSources.innerHTML = "<li>Sources are unavailable.</li>";
+        transcriptStatus.textContent = "";
+        transcriptStatus.className = "transcript-status hidden";
     }
 }
 
-// Asks the question when the button is clicked
+// Index transcript content only when the user explicitly requests it.
+indexRagButton.addEventListener("click", indexRagContent);
+
+// Asks the question when the button is clicked. This is Chroma-only and does
+// not retrieve missing transcripts.
 askQuestionButton.addEventListener("click", askQuestion);
 
 // Asks the question when Enter is pressed
@@ -614,6 +760,8 @@ questionInput.addEventListener("keydown", event => {
 clearQuestionButton.addEventListener("click", () => {
     questionInput.value = "";
     answerText.textContent = defaultAnswer;
+    transcriptStatus.textContent = "";
+    transcriptStatus.className = "transcript-status hidden";
     askQuestionButton.disabled = true;
 });
 

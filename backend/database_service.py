@@ -91,6 +91,7 @@ def initialize_database():
                 channel_id TEXT NOT NULL,
                 transcript TEXT NOT NULL,
                 language TEXT,
+                segments_json TEXT,
                 last_updated TEXT NOT NULL,
                 FOREIGN KEY (video_id)
                     REFERENCES videos(video_id)
@@ -348,8 +349,16 @@ def is_cache_fresh(channel_id, max_age_minutes=CACHE_MAX_AGE_MINUTES):
 
 
 # Saves a video transcript so it can be reused later
-def save_transcript(video_id, channel_id, transcript, language = None):
-    """Save a video transcript to the database."""
+def save_transcript(
+    video_id,
+    channel_id,
+    transcript,
+    language=None,
+    segments=None,
+):
+    """Save a raw transcript plus optional language/timing metadata."""
+
+    segments_json = json.dumps(segments, ensure_ascii=False) if segments else None
 
     with get_connection() as connection:
         connection.execute(
@@ -359,15 +368,17 @@ def save_transcript(video_id, channel_id, transcript, language = None):
                 channel_id,
                 transcript,
                 language,
+                segments_json,
                 last_updated
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 video_id,
                 channel_id,
                 transcript,
                 language,
+                segments_json,
                 datetime.now().isoformat(),
             ),
         )

@@ -621,11 +621,14 @@ def retrieve_relevant_chunks(
         if score < MIN_RELEVANCE_SCORE:
             continue
 
-        # Skips transcript chunks below the minimum relevance score
-        if float(score) < MIN_RELEVANCE_SCORE:
-            continue
+        video_id = str(metadata.get("video_id") or "")
+        start_time = metadata.get("start_time")
+        end_time = metadata.get("end_time")
 
-        chunk = chunks[int(chunk_index)]
+        video_url = f"https://www.youtube.com/watch?v={video_id}" if video_id else None
+        if video_url and start_time is not None:
+            video_url += f"&t={max(0, int(float(start_time)))}s"
+
         results.append(
             {
                 "video_id": video_id,

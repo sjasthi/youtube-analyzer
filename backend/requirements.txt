@@ -5,5 +5,5 @@ python-dotenv
 pandas
 youtube-transcript-api
 sentence-transformers
-faiss-cpu
+chromadb>=1.5.9,<2
 google-genai

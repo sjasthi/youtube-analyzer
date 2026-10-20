@@ -43,15 +43,82 @@
     - The selected theme is saved in browser `localStorage`.
     - Cards, forms, the Q&A area, DataTables controls, export buttons, and the video table follow the selected theme.
     - The Chart.js posting-trend chart updates its text and grid colors immediately when the theme changes.
-- RAG implementation using a test file instead of actual transcripts (Youtube-transcript-api blocked me for too many request)
-    - use Gemini API: model gemini-3.8-flash
-    - FAISS implemented (find transcript chunks whose embeddings are most similar to the user's question embedding)
-    - At most only 3 videos (for testing): limit can be removed at later date
-- Add a test mode for RAG (to not hit transcript block)
+- RAG implementation
+    - Gemini API generates answers
+    - Sentence Transformers create embeddings
+    - FAISS was initially used for semantic retrieval
+    - Added `RAG_TEST_MODE` to test without live transcript requests
 - Added transcript retrieval
-- Saved retrieved transcripts in the SQLite database for reuse
+- Saved retrieved transcripts in SQLite for reuse
 - Added source video links to answers
 - Filtered out less relevant transcript chunks
+
+<b>FP6</b>
+- Replaced FAISS with Chroma for persistent RAG vector storage
+- Chroma stores transcript chunks, embeddings, and source metadata in `data/chroma_db/`
+- SQLite still stores the full/raw transcript so the original transcript can be reused or reprocessed later
+- RAG lookup order now uses:
+    1. Chroma for already-indexed transcript chunks
+    2. SQLite for saved raw transcripts
+    3. YouTube transcript retrieval only when the video is not already stored
+- Previously indexed videos are skipped instead of being re-chunked and re-embedded
+- Chroma retrieval is filtered by canonical `channel_id` so one channel's chunks do not mix with another channel
+- Test transcript data is stored under a separate Chroma namespace so it does not mix with live channel data
+- Source video links are deduplicated so several retrieved chunks from the same video show one source video
+- Added `/api/rag/stats` to inspect persistent Chroma storage
+- Improved DataTables pagination styling so the active page number remains readable in light and dark mode
+- Added safer live transcript batch retrieval
+    - SQLite and Chroma cache hits remain immediate
+    - New YouTube transcript requests are paced with a configurable delay and small random jitter
+    - Default delay is 8 seconds plus up to 2 seconds of jitter between live YouTube requests
+- Added stop-on-block behavior
+    - `RequestBlocked` and `IpBlocked` stop the current transcript batch immediately
+    - Successfully retrieved transcripts are saved to SQLite before the batch stops
+    - Already-indexed Chroma videos remain available for RAG
+- Added transcript status information to the Q&A UI
+    - Shows how many selected videos are currently indexed for RAG
+    - Shows a clear warning if YouTube temporarily blocks transcript retrieval
+    - Explains that cached/indexed videos are still usable and that indexing can continue later
+- Added configurable transcript pacing settings:
+    - `TRANSCRIPT_REQUEST_DELAY_SECONDS`
+    - `TRANSCRIPT_REQUEST_JITTER_SECONDS`
+- Separated RAG indexing from RAG question answering
+    - Added an explicit **Index RAG Content** button
+    - Indexing is the only normal UI action that retrieves missing transcripts
+    - Asking a question searches existing Chroma content only and never retries YouTube
+- If transcript indexing stops early (for example, 14 of 15 videos), RAG can still answer questions from the 14 videos already indexed
+- Missing/blocked videos are not automatically retried on every question
+- Added RAG coverage information after channel analysis so users can see whether the channel already has indexed content
+- Added `POST /api/rag/index` for explicit transcript retrieval + Chroma indexing
+- Added richer RAG source metadata
+    - Chroma chunks now support `published_at`, `language`, `start_time`, and `end_time`
+    - New transcript retrievals preserve YouTube caption language and timing segments in SQLite
+    - Existing Chroma chunks can be enriched with publication date/language metadata without re-embedding
+- Added timestamp-aware RAG sources
+    - Source links jump to the approximate transcript chunk timestamp when timing data is available
+    - The Q&A source list shows timestamp, language, publication date, and video duration when available
+- Improved native-language transcript handling
+    - Uses YouTube default audio/language metadata when available
+    - Does not intentionally translate captions before indexing
+- Improved "most recent/latest/newest video" questions
+    - Uses video `published_at` metadata instead of semantic similarity alone
+    - Restricts retrieval to the actual newest indexed video
+    - If the newest video is not indexed, the chatbot explains that instead of silently answering from an older video
+- Expanded Chroma metadata for RAG maintenance and richer filtering
+    - Added `channel_title`
+    - Added numeric `published_timestamp`
+    - Added `duration_seconds`
+    - Added `indexed_at`
+    - Added `transcript_source`
+    - Added SHA-256 `transcript_hash`
+    - Added `embedding_model`
+    - Added configurable `chunking_version`
+    - Added `metadata_version`
+- Existing Chroma records can be enriched with recoverable channel/video metadata without re-embedding
+- Legacy metadata that cannot be reconstructed reliably is labeled `legacy_unknown` rather than guessed
+- `/api/rag/stats` now reports stored embedding models, chunking versions, transcript sources, and metadata versions
+- Source details can now also display video duration
+- Added `RAG_CHUNKING_VERSION` to `.env.example` so future chunking-strategy changes can be tracked
 
 ## Authors
 - Ashley Zenzola
