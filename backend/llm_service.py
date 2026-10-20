@@ -5,7 +5,7 @@ This file is intentionally separate from rag_service.py:
 - llm_service.py turns that retrieved context into a readable answer.
 
 Keeping those responsibilities separate makes it easy to change the generation
-provider later without rewriting transcript chunking or FAISS retrieval.
+provider later without rewriting transcript chunking or Chroma retrieval.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 # The model can be changed in .env without editing Python source code.
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
 
 def is_gemini_configured() -> bool:
