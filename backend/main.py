@@ -185,11 +185,9 @@ def get_missing_rag_videos(channel_id, videos):
     video_ids = [video["video_id"] for video in videos]
     indexed_video_ids = get_indexed_video_ids(channel_id, video_ids)
 
-    missing_videos = [
-        video
-        for video in videos
-        if video["video_id"] not in indexed_video_ids
-    ]
+    # Only contact YouTube when nothing is cached.
+    # ORIGINAL: transcripts = get_video_transcripts(videos)
+    transcripts = get_video_transcripts(videos, channel_id)
 
     return missing_videos, indexed_video_ids
 

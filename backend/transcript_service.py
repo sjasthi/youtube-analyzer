@@ -1,16 +1,32 @@
 """Functions for retrieving YouTube video transcripts."""
 
-# FIXME: CURRENTLY TESTING - Will change later
-
 from youtube_transcript_api import YouTubeTranscriptApi
 
-def get_video_transcript(video_id):
-    """Return the transcript text for one YouTube video."""
+from backend.database_service import get_saved_transcript, save_transcript
+
+def get_video_transcript(video_id, channel_id):
+    """Return a saved transcript or retrieve one from YouTube."""
+
+    # Checks the database first
+    saved = get_saved_transcript(video_id)
+
+    if saved is not None:
+        print(f"Using cached transcript from SQLite: {video_id}")
+        return saved["transcript"]
+    
+    print(f"Fetching transcript from YouTube: {video_id}")
+
+    # Retrieves the transcript from YouTube if it is not saved
     transcript = YouTubeTranscriptApi().fetch(video_id)
+    transcript_text = " ".join(snippet.text for snippet in transcript)
 
-    return " ".join(snippet.text for snippet in transcript)
+    # Saves the transcript for future requests
+    save_transcript(video_id, channel_id, transcript_text)
 
-def get_video_transcripts(videos):
+    return transcript_text
+
+# Retrieves transcripts for multiple videos, skipping videos that fail
+def get_video_transcripts(videos, channel_id):
     """Return transcripts for a list of videos."""
     transcripts = []
 
@@ -18,7 +34,7 @@ def get_video_transcripts(videos):
         video_id = video["video_id"]
 
         try:
-            transcript = get_video_transcript(video_id)
+            transcript = get_video_transcript(video_id, channel_id)
 
             transcripts.append({
                 "video_id": video_id,
@@ -33,12 +49,14 @@ def get_video_transcripts(videos):
     return transcripts
 
 if __name__ == "__main__":
-    from youtube_service import get_all_videos
+    from backend.youtube_service import get_all_videos
 
     channel_id = "UCBNvuaTVFUfQlVt9uLeMOfA"
+
     result = get_all_videos(channel_id)
-    videos = result["videos"][:3]
-    transcripts = get_video_transcripts(videos)
+    videos = result["videos"][:1]
+
+    transcripts = get_video_transcripts(videos, channel_id)
 
     for item in transcripts:
         print("\nVIDEO:", item["title"])
