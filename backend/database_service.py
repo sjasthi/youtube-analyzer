@@ -6,6 +6,7 @@ need to download the same full channel from YouTube every time it is analyzed.
 SQLite is part of Python's standard library, so no extra package is required.
 """
 
+import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -67,6 +68,8 @@ def initialize_database():
                 thumbnail_url TEXT,
                 duration TEXT,
                 duration_seconds INTEGER NOT NULL DEFAULT 0,
+                default_language TEXT,
+                default_audio_language TEXT,
                 view_count INTEGER NOT NULL DEFAULT 0,
                 like_count INTEGER NOT NULL DEFAULT 0,
                 comment_count INTEGER NOT NULL DEFAULT 0,
@@ -101,6 +104,25 @@ def initialize_database():
                 ON transcripts(channel_id);
             """
         )
+
+        # Lightweight schema migration for databases created by earlier versions.
+        # SQLite CREATE TABLE IF NOT EXISTS does not add new columns to an
+        # existing table, so add the metadata columns only when they are missing.
+        video_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(videos)")
+        }
+        if "default_language" not in video_columns:
+            connection.execute("ALTER TABLE videos ADD COLUMN default_language TEXT")
+        if "default_audio_language" not in video_columns:
+            connection.execute(
+                "ALTER TABLE videos ADD COLUMN default_audio_language TEXT"
+            )
+
+        transcript_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(transcripts)")
+        }
+        if "segments_json" not in transcript_columns:
+            connection.execute("ALTER TABLE transcripts ADD COLUMN segments_json TEXT")
 
 
 def save_channel_and_videos(channel, videos):
@@ -179,12 +201,14 @@ def save_channel_and_videos(channel, videos):
                     thumbnail_url,
                     duration,
                     duration_seconds,
+                    default_language,
+                    default_audio_language,
                     view_count,
                     like_count,
                     comment_count,
                     last_updated
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(video_id) DO UPDATE SET
                     channel_id = excluded.channel_id,
                     title = excluded.title,
@@ -193,6 +217,8 @@ def save_channel_and_videos(channel, videos):
                     thumbnail_url = excluded.thumbnail_url,
                     duration = excluded.duration,
                     duration_seconds = excluded.duration_seconds,
+                    default_language = excluded.default_language,
+                    default_audio_language = excluded.default_audio_language,
                     view_count = excluded.view_count,
                     like_count = excluded.like_count,
                     comment_count = excluded.comment_count,
@@ -207,6 +233,8 @@ def save_channel_and_videos(channel, videos):
                     video.get("thumbnail_url"),
                     video.get("duration"),
                     video.get("duration_seconds", 0),
+                    video.get("default_language"),
+                    video.get("default_audio_language"),
                     video.get("view_count", 0),
                     video.get("like_count", 0),
                     video.get("comment_count", 0),
@@ -277,6 +305,8 @@ def get_cached_channel_data(channel_id):
             "thumbnail_url": row["thumbnail_url"],
             "duration": row["duration"],
             "duration_seconds": row["duration_seconds"],
+            "default_language": row["default_language"],
+            "default_audio_language": row["default_audio_language"],
             "view_count": row["view_count"],
             "like_count": row["like_count"],
             "comment_count": row["comment_count"],
