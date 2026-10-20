@@ -198,13 +198,31 @@ function displayAnalytics(analytics) {
             : "N/A";
 
     if (analytics.most_viewed_video) {
-        mostViewedTitle.textContent = analytics.most_viewed_video.title;
-        mostViewedValue.textContent = `${formatNumber(analytics.most_viewed_video.view_count)} views`;
+        const video = analytics.most_viewed_video;
+        const videoLink = document.createElement("a");
+
+        videoLink.href = `https://www.youtube.com/watch?v=${encodeURIComponent(video.video_id)}`;
+        videoLink.target = "_blank";
+        videoLink.rel = "noopener noreferrer";
+        videoLink.className = "video-title";
+        videoLink.textContent = video.title;
+
+        mostViewedTitle.replaceChildren(videoLink);
+        mostViewedValue.textContent = `${formatNumber(video.view_count)} views`;
     }
 
     if (analytics.most_liked_video) {
-        mostLikedTitle.textContent = analytics.most_liked_video.title;
-        mostLikedValue.textContent = `${formatNumber(analytics.most_liked_video.like_count)} likes`;
+        const video = analytics.most_liked_video;
+        const videoLink = document.createElement("a");
+
+        videoLink.href = `https://www.youtube.com/watch?v=${encodeURIComponent(video.video_id)}`;
+        videoLink.target = "_blank";
+        videoLink.rel = "noopener noreferrer";
+        videoLink.className = "video-title";
+        videoLink.textContent = video.title;
+
+        mostLikedTitle.replaceChildren(videoLink);
+        mostLikedValue.textContent = `${formatNumber(video.like_count)} likes`;
     }
 
     displayUploadChart(analytics.uploads_by_month);
@@ -706,6 +724,7 @@ async function askQuestion() {
                 link.textContent = source.title;
                 link.target = "_blank";
                 link.rel = "noopener noreferrer";
+                link.className = "video-title";
 
                 listItem.appendChild(link);
 
@@ -800,3 +819,77 @@ updateThemeToggle();
 
 // Check FastAPI as soon as the page loads.
 checkBackendConnection();
+
+// Shows the Back to Top button when scrolling down
+const backToTopButton = document.getElementById("backToTopButton");
+
+window.addEventListener("scroll", () => {
+    backToTopButton.style.display = window.scrollY > 300 ? "flex" : "none";
+});
+
+// Smoothly scrolls back to the top when the button is clicked
+backToTopButton.addEventListener("click", () => {
+    window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+    });
+});
+
+// Makes section headings collapsible
+document.querySelectorAll(".section-toggle").forEach(button => {
+    button.addEventListener("click", () => {
+        const contentId = button.getAttribute("aria-controls");
+        const content = document.getElementById(contentId);
+        const isExpanded = button.getAttribute("aria-expanded") === "true";
+        const icon = button.querySelector(".toggle-icon");
+
+        content.classList.toggle("collapsed", isExpanded);
+        button.setAttribute("aria-expanded", String(!isExpanded));
+        icon.textContent = isExpanded ? "+" : "−";
+    });
+});
+
+// Text size controls
+const decreaseTextSizeButton = document.getElementById("decreaseTextSize");
+const resetTextSizeButton = document.getElementById("resetTextSize");
+const increaseTextSizeButton = document.getElementById("increaseTextSize");
+
+// Default and allowed text sizes (in pixels)
+const defaultTextSize = 16;
+const minTextSize = 12;
+const maxTextSize = 24;
+const textSizeStep = 2;
+
+// Load the saved text size, or use the default
+let currentTextSize = Number(localStorage.getItem("textSize")) || defaultTextSize;
+
+// Apply the selected text size
+function applyTextSize() {
+    document.documentElement.style.fontSize = `${currentTextSize}px`;
+    localStorage.setItem("textSize", currentTextSize);
+}
+
+// Decrease text size
+decreaseTextSizeButton.addEventListener("click", () => {
+    if (currentTextSize > minTextSize) {
+        currentTextSize = Math.max(minTextSize, currentTextSize - textSizeStep);
+        applyTextSize();
+    }
+});
+
+// Reset text size
+resetTextSizeButton.addEventListener("click", () => {
+    currentTextSize = defaultTextSize;
+    applyTextSize();
+});
+
+// Increase text size
+increaseTextSizeButton.addEventListener("click", () => {
+    if (currentTextSize < maxTextSize) {
+        currentTextSize = Math.min(maxTextSize, currentTextSize + textSizeStep);
+        applyTextSize();
+    }
+});
+
+// Apply the saved text size when the page loads
+applyTextSize();
