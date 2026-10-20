@@ -119,6 +119,11 @@
 - `/api/rag/stats` now reports stored embedding models, chunking versions, transcript sources, and metadata versions
 - Source details can now also display video duration
 - Added `RAG_CHUNKING_VERSION` to `.env.example` so future chunking-strategy changes can be tracked
+- Added text resizing
+- Added collapsible sections
+- Added a Back to Top button
+- Added clickable links in the Video Sample Analytics section
+- Matched video link colors to the links in the Recent Videos section
 
 ## Authors
 - Ashley Zenzola
