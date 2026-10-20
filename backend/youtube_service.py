@@ -193,6 +193,8 @@ def get_video_details_in_batches(youtube, video_ids):
                 "title": snippet.get("title"),
                 "description": snippet.get("description"),
                 "published_at": snippet.get("publishedAt"),
+                "default_language": snippet.get("defaultLanguage"),
+                "default_audio_language": snippet.get("defaultAudioLanguage"),
                 "thumbnail_url": snippet.get("thumbnails", {}).get("medium", {}).get("url"),
                 "duration": duration_iso,
                 "duration_seconds": parse_duration_to_seconds(duration_iso),

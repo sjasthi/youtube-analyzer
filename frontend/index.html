@@ -123,7 +123,12 @@
         <!-- Ask questions about the channel -->
         <section id = "questionSection" class = "card hidden">
             <h2>Enter a Question</h2>
-            <p class = "note">Ask questions about the content covered in these videos.</p>
+            <p class = "note">Ask questions using transcript content that has already been indexed in Chroma.</p>
+
+            <div class="rag-index-row">
+                <button id="indexRagButton" type="button">Index RAG Content</button>
+                <span class="note">Indexing retrieves only missing transcripts. Asking questions does not contact YouTube.</span>
+            </div>
 
             <div class = "question-row">
                 <input
@@ -149,6 +154,13 @@
                     What topics do these videos have in common?
                 </button>
             </div>
+
+            <div
+                id="transcriptStatus"
+                class="transcript-status hidden"
+                role="status"
+                aria-live="polite"
+            ></div>
 
             <div class = "answer-card">
                 <h3>Answer</h3>

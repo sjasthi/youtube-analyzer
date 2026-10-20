@@ -138,6 +138,18 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 
 /* RAG question and answer section. */
 .question-row { display: flex; gap: 10px; }
+
+/* Keep transcript indexing separate from question answering. */
+.rag-index-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.rag-index-row .note {
+    margin: 0;
+}
 .example-questions { margin-top: 15px; }
 .example-questions p { margin-bottom: 8px; }
 
@@ -165,6 +177,29 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 }
 .answer-card h3 { margin-bottom: 8px; }
 .answer-card p { margin-bottom: 0; white-space: pre-wrap; }
+
+/* Shows transcript indexing progress and explains temporary YouTube blocks. */
+.transcript-status {
+    margin-top: 18px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-secondary);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.transcript-status.warning {
+    border-color: var(--error-border);
+    background: var(--error-bg);
+    color: var(--error);
+}
+
+.transcript-status.success {
+    border-color: var(--success);
+    color: var(--success);
+}
 
 .success { color: var(--success); font-weight: bold; }
 .error { color: var(--error); font-weight: bold; }
@@ -250,9 +285,14 @@ th { background: var(--surface-secondary); }
 
 .dt-container .dt-paging .dt-paging-button.current,
 .dt-container .dt-paging .dt-paging-button.current:hover {
-    color: var(--button-text) !important;
-    background: var(--button-bg) !important;
-    border-color: var(--button-bg) !important;
+    /* Highlight the active page without turning the number into a dark box. */
+    color: var(--text) !important;
+    background: var(--surface-secondary) !important;
+    border: 2px solid var(--text) !important;
+    border-radius: 6px !important;
+    font-weight: 700 !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
 }
 
 .dt-container .dt-paging .dt-paging-button.disabled {
@@ -319,10 +359,22 @@ html.dark-mode table.dataTable tbody tr:hover > * {
     .theme-toggle { align-self: flex-start; }
     .search-row { flex-direction: column; }
     .question-row { flex-direction: column; }
+    .rag-index-row { align-items: stretch; flex-direction: column; }
     .channel-grid, .analytics-grid, .top-videos { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 480px) {
     .page-header { flex-direction: column; }
     .subtitle { margin-bottom: 10px; }
+}
+
+
+/* Extra context shown beside RAG source links (timestamp/language/date). */
+.source-meta {
+    color: var(--muted-text, #666);
+    font-size: 0.9em;
+}
+
+.dark-mode .source-meta {
+    color: var(--muted-text, #b9b9b9);
 }
