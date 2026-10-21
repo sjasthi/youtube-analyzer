@@ -62,7 +62,7 @@ h1 { margin-bottom: 8px; }
 h2, h3 { margin-top: 0; }
 .subtitle, .muted, .note, .metric-note { color: var(--muted); }
 .subtitle { margin-top: 0; margin-bottom: 30px; }
-.note, .metric-note { font-size: 14px; }
+.note, .metric-note { font-size: 0.875rem; }
 
 /* Keeps the theme button in the top-right. */
 .page-header {
@@ -70,6 +70,13 @@ h2, h3 { margin-top: 0; }
     align-items: flex-start;
     justify-content: space-between;
     gap: 20px;
+}
+
+/* Header controls */
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .theme-toggle {
@@ -117,7 +124,7 @@ input, select {
     padding: 12px;
     border: 1px solid var(--input-border);
     border-radius: 6px;
-    font-size: 16px;
+    font-size: 1rem;
     background: var(--surface);
     color: var(--text);
 }
@@ -130,7 +137,7 @@ button {
     border-radius: 6px;
     background: var(--button-bg);
     color: var(--button-text);
-    font-size: 16px;
+    font-size: 1rem;
     cursor: pointer;
 }
 button:hover { opacity: 0.9; }
@@ -157,6 +164,7 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
     margin-right: 8px;
     margin-bottom: 8px;
     padding: 8px 12px;
+    font-size: 1rem;
     background: var(--surface-secondary);
     color: var(--text);
     border: 1px solid var(--border);
@@ -377,4 +385,134 @@ html.dark-mode table.dataTable tbody tr:hover > * {
 
 .dark-mode .source-meta {
     color: var(--muted-text, #b9b9b9);
+}
+
+/* Back to Top button */
+#backToTopButton {
+    display: none;
+    position: fixed;
+    bottom: 25px;
+    right: 25px;
+    width: 50px;
+    height: 50px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background-color: #000;
+    color: #fff;
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 1000;
+
+    /* Centers the arrow */
+    align-items: center;
+    justify-content: center;
+}
+
+#backToTopButton:hover {
+    background-color: #222;
+}
+
+/* Back to Top button in dark mode */
+.dark-mode #backToTopButton {
+    background-color: #fff;
+}
+
+.dark-mode #backToTopButton .arrow-up {
+    border-top-color: #000;
+    border-left-color: #000;
+}
+
+.dark-mode #backToTopButton:hover {
+    background-color: #ddd;
+}
+
+/* Thicker Back to Top arrow */
+.arrow-up {
+    width: 12px;
+    height: 12px;
+    border-top: 3px solid white;
+    border-left: 3px solid white;
+    transform: translateY(3px) rotate(45deg);
+}
+
+/* Header controls */
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Text size buttons */
+.text-size-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.text-size-controls button {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background-color: #f0f0f0;
+    color: #000;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.text-size-controls button:hover {
+    background-color: #ddd;
+}
+
+/* Text size buttons in dark mode */
+.dark-mode .text-size-controls button {
+    border-color: #555;
+    background-color: #333;
+    color: #fff;
+}
+
+.dark-mode .text-size-controls button:hover {
+    background-color: #444;
+}
+
+/* Collapsible section heading */
+.section-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 50px;
+    padding: 10px 12px;
+    margin-bottom: 15px;
+    border: none;
+    border-radius: 6px;
+    background: #eee;
+    color: #000;
+    font-size: 1.4em;
+    font-weight: bold;
+    text-align: left;
+    cursor: pointer;
+}
+
+/* Hover effect */
+.section-toggle:hover {
+    background: #ddd;
+}
+
+/* Hide content when collapsed */
+.collapsible-content.collapsed {
+    display: none;
+}
+
+/* Expand/collapse indicator */
+.toggle-icon {
+    font-size: 1.2em;
+    padding-left: 10px;
 }
