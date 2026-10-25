@@ -51,7 +51,15 @@ const answerText = document.getElementById("answerText");
 const answerSources = document.getElementById("answerSources");
 const transcriptStatus = document.getElementById("transcriptStatus");
 const clearQuestionButton = document.getElementById("clearQuestionButton");
+const answerLanguage = document.getElementById("answerLanguage");
 const exampleQuestions = document.querySelectorAll(".example-question");
+
+// Cache-only transcript viewer elements.
+const transcriptViewerSection = document.getElementById("transcriptViewerSection");
+const transcriptVideoSelect = document.getElementById("transcriptVideoSelect");
+const loadTranscriptButton = document.getElementById("loadTranscriptButton");
+const transcriptViewerMeta = document.getElementById("transcriptViewerMeta");
+const transcriptViewerText = document.getElementById("transcriptViewerText");
 
 // Default messages for the question and answer section
 const defaultAnswer = "The answer will appear here.";
@@ -303,9 +311,9 @@ function displayVideos(videos) {
         const row = document.createElement("tr");
         const cell = document.createElement("td");
 
-        // There are now 7 table columns because the last one stores
-        // a hidden YouTube URL used by the export buttons.
-        cell.colSpan = 7;
+        // There are 8 table columns: thumbnail, video details, statistics,
+        // and a hidden YouTube URL used by the export buttons.
+        cell.colSpan = 8;
         cell.textContent = "No public videos were returned.";
         row.appendChild(cell);
         videoTableBody.appendChild(row);
@@ -319,6 +327,33 @@ function displayVideos(videos) {
 
             // Build the normal YouTube watch URL from the video ID.
             const videoUrl = `https://www.youtube.com/watch?v=${video.video_id}`;
+
+            // Show the YouTube thumbnail as a clickable image. The thumbnail
+            // is loaded directly from the URL already returned by the backend.
+            const thumbnailCell = document.createElement("td");
+            thumbnailCell.className = "video-thumbnail-cell";
+
+            if (video.thumbnail_url) {
+                const thumbnailLink = document.createElement("a");
+                thumbnailLink.href = videoUrl;
+                thumbnailLink.target = "_blank";
+                thumbnailLink.rel = "noopener noreferrer";
+                thumbnailLink.setAttribute("aria-label", `Open ${video.title || "video"} on YouTube`);
+
+                const thumbnail = document.createElement("img");
+                thumbnail.className = "video-thumbnail";
+                thumbnail.src = video.thumbnail_url;
+                thumbnail.alt = `${video.title || "Video"} thumbnail`;
+                thumbnail.loading = "lazy";
+
+                thumbnailLink.appendChild(thumbnail);
+                thumbnailCell.appendChild(thumbnailLink);
+            } else {
+                const unavailable = document.createElement("span");
+                unavailable.className = "thumbnail-unavailable";
+                unavailable.textContent = "No image";
+                thumbnailCell.appendChild(unavailable);
+            }
 
             // Make the video title clickable. It opens YouTube in a new tab.
             const title = document.createElement("a");
@@ -356,12 +391,13 @@ function displayVideos(videos) {
             commentsCell.textContent = formatNumber(video.comment_count);
             commentsCell.dataset.order = video.comment_count;
 
-            // This seventh column is hidden on the webpage but included
+            // This eighth column is hidden on the webpage but included
             // in exported CSV, Excel, PDF, Copy, and Print output.
             const urlCell = document.createElement("td");
             urlCell.textContent = videoUrl;
 
             row.append(
+                thumbnailCell,
                 titleCell,
                 publishedCell,
                 durationCell,
@@ -378,7 +414,8 @@ function displayVideos(videos) {
     // Export only rows that match the current DataTables search/filter.
     // page: "all" means export every matching row, not just the current page.
     const exportOptions = {
-        columns: [0, 1, 2, 3, 4, 5, 6],
+        // Skip column 0 because image thumbnails do not belong in text exports.
+        columns: [1, 2, 3, 4, 5, 6, 7],
         modifier: {
             search: "applied",
             order: "applied",
@@ -386,10 +423,10 @@ function displayVideos(videos) {
         },
         format: {
             body: function(data, row, column, node) {
-                // The visible Video cell contains both the title link and
-                // the video ID. Export only the readable title here because
-                // the full URL is exported in its own column.
-                if (column === 0) {
+                // Column 1 is the visible Video cell (column 0 is the thumbnail).
+                // Export only the readable title because the full URL is exported
+                // in its own hidden column.
+                if (column === 1) {
                     const link = node.querySelector("a.video-title");
                     return link ? link.textContent.trim() : node.textContent.trim();
                 }
@@ -404,20 +441,27 @@ function displayVideos(videos) {
         pageLength: 10,
         lengthMenu: [10, 25, 50],
 
-        // Published defaults to newest first.
-        order: [[1, "desc"]],
+        // Published defaults to newest first. Thumbnail is column 0, so
+        // the Published column is index 2.
+        order: [[2, "desc"]],
 
         columnDefs: [
             {
-                // Column 1 = Published.
-                targets: 1,
+                // Thumbnail is visual only; it should not affect search or sorting.
+                targets: 0,
+                orderable: false,
+                searchable: false
+            },
+            {
+                // Column 2 = Published.
+                targets: 2,
                 // Only switch between newest and oldest.
                 orderSequence: ["desc", "asc"]
             },
             {
-                // Column 6 contains the full YouTube URL.
+                // Column 7 contains the full YouTube URL.
                 // Keep it out of the visible table, but available for export.
-                targets: 6,
+                targets: 7,
                 visible: false,
                 searchable: false
             }
@@ -472,7 +516,7 @@ function displayVideos(videos) {
     });
 
     // Connect the individual column filters.
-    // The seventh URL column has no filter input and is hidden.
+    // Thumbnail and hidden URL columns intentionally have no filter input.
     $("#videoTable thead tr.filter-row th").each(function (columnIndex) {
         $("input", this)
             .off("keyup change")
@@ -506,6 +550,11 @@ async function analyzeChannel() {
     analyticsSection.classList.add("hidden");
     videosSection.classList.add("hidden");
     questionSection.classList.add("hidden");
+    transcriptViewerSection.classList.add("hidden");
+    transcriptVideoSelect.innerHTML = '<option value="">No cached transcripts loaded</option>';
+    loadTranscriptButton.disabled = true;
+    transcriptViewerMeta.textContent = "";
+    transcriptViewerText.textContent = "Select a cached transcript to view it here.";
     transcriptStatus.textContent = "";
     transcriptStatus.className = "transcript-status hidden";
 
@@ -555,7 +604,9 @@ async function analyzeChannel() {
         // separate user action, so channel analysis itself does not retrieve
         // transcripts.
         questionSection.classList.remove("hidden");
+        transcriptViewerSection.classList.remove("hidden");
         await refreshRagCoverage();
+        await refreshTranscriptViewer();
 
     } catch (error) {
         errorMessage.textContent = `Error: ${error.message}`;
@@ -638,6 +689,7 @@ async function indexRagContent() {
         }
 
         displayTranscriptStatus(data.transcript_status);
+        await refreshTranscriptViewer();
     } catch (error) {
         displayTranscriptStatus({
             severity: "warning",
@@ -699,6 +751,7 @@ async function askQuestion() {
             body: JSON.stringify({
                 channel_id: activeChannelId,
                 question: question,
+                answer_language: answerLanguage.value.trim() || "auto",
             }),
         });
         
@@ -762,6 +815,105 @@ async function askQuestion() {
         transcriptStatus.className = "transcript-status hidden";
     }
 }
+
+// Load the list of transcripts that already exist in SQLite. This endpoint is
+// cache-only and will never trigger youtube-transcript-api.
+async function refreshTranscriptViewer() {
+    if (!activeChannelId) return;
+
+    try {
+        const response = await fetch(
+            `/api/channel/${encodeURIComponent(activeChannelId)}/cached-transcripts`
+        );
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Unable to read cached transcripts.");
+
+        transcriptVideoSelect.innerHTML = "";
+        const transcripts = data.transcripts || [];
+
+        if (transcripts.length === 0) {
+            transcriptVideoSelect.innerHTML = '<option value="">No cached transcripts yet</option>';
+            loadTranscriptButton.disabled = true;
+            transcriptViewerMeta.textContent = "";
+            transcriptViewerText.textContent = "Index RAG content or run youtube_transcriptor.py to create cached transcripts.";
+            return;
+        }
+
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = `Choose a transcript (${transcripts.length} cached)`;
+        transcriptVideoSelect.appendChild(placeholder);
+
+        transcripts.forEach(item => {
+            const option = document.createElement("option");
+            option.value = item.video_id;
+            const language = item.language ? ` [${item.language}]` : "";
+            option.textContent = `${item.title}${language}`;
+            transcriptVideoSelect.appendChild(option);
+        });
+
+        loadTranscriptButton.disabled = false;
+        transcriptViewerMeta.textContent = `${transcripts.length} transcript${transcripts.length === 1 ? "" : "s"} available in SQLite.`;
+        transcriptViewerText.textContent = "Select a cached transcript to view it here.";
+    } catch (error) {
+        loadTranscriptButton.disabled = true;
+        transcriptViewerMeta.textContent = `Unable to load cached transcripts: ${error.message}`;
+    }
+}
+
+function formatTranscriptSegmentTime(totalSeconds) {
+    return formatDuration(Number(totalSeconds || 0));
+}
+
+async function viewSelectedTranscript() {
+    const videoId = transcriptVideoSelect.value;
+    if (!videoId) {
+        transcriptViewerText.textContent = "Choose a cached transcript first.";
+        return;
+    }
+
+    loadTranscriptButton.disabled = true;
+    transcriptViewerText.textContent = "Loading cached transcript...";
+
+    try {
+        const response = await fetch(`/api/transcript/${encodeURIComponent(videoId)}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Unable to load transcript.");
+
+        const meta = [];
+        if (data.language) meta.push(`Language: ${data.language}`);
+        if (data.published_at) meta.push(`Published: ${formatDate(data.published_at)}`);
+        if (data.duration_seconds !== null && data.duration_seconds !== undefined) {
+            meta.push(`Duration: ${formatDuration(data.duration_seconds)}`);
+        }
+        meta.push(data.has_timestamps ? "Timestamps: available" : "Timestamps: unavailable (legacy cached transcript)");
+        transcriptViewerMeta.textContent = meta.join(" • ");
+
+        if (data.segments && data.segments.length > 0) {
+            transcriptViewerText.textContent = data.segments
+                .map(segment => {
+                    const start = formatTranscriptSegmentTime(segment.start);
+                    const endValue = segment.end !== undefined && segment.end !== null
+                        ? segment.end
+                        : Number(segment.start || 0) + Number(segment.duration || 0);
+                    const end = formatTranscriptSegmentTime(endValue);
+                    return `[${start}–${end}] ${segment.text || ""}`;
+                })
+                .join("\n");
+        } else {
+            transcriptViewerText.textContent = data.transcript || "This cached transcript is empty.";
+        }
+    } catch (error) {
+        transcriptViewerText.textContent = `Error: ${error.message}`;
+    } finally {
+        loadTranscriptButton.disabled = false;
+    }
+}
+
+transcriptVideoSelect.addEventListener("change", () => {
+    if (transcriptVideoSelect.value) viewSelectedTranscript();
+});
+loadTranscriptButton.addEventListener("click", viewSelectedTranscript);
 
 // Index transcript content only when the user explicitly requests it.
 indexRagButton.addEventListener("click", indexRagContent);

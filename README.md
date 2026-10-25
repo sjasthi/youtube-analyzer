@@ -125,6 +125,38 @@
 - Added clickable links in the Video Sample Analytics section
 - Matched video link colors to the links in the Recent Videos section
 
+<b>FP7</b>
+- Thumbnails to 'Recent Videos'
+- Added multilingual RAG support
+    - Default local embedding model changed to `intfloat/multilingual-e5-small` for cross-language semantic retrieval
+    - Auto response mode answers in the same language as the user's question unless another language is explicitly requested
+    - Leave the Answer language field blank for Auto, or type a language such as French, Japanese, Arabic, Hindi, Korean, or Portuguese (Brazil)
+    - The Q&A UI accepts any target language name as free text; leave it blank for Auto mode
+    - English questions can retrieve non-English transcript content and vice versa when the multilingual embeddings find relevant chunks
+- Added embedding-model compatibility checks
+    - Existing Chroma data built with another embedding model is not queried with incompatible embeddings
+    - **Index RAG Content** rebuilds that channel using cached SQLite transcripts first
+- Added specific-video question handling
+    - Questions that explicitly contain a full video title or a quoted partial title are mapped to that video's `video_id`
+    - Chroma retrieval is then restricted to that video only
+    - If the requested video is not indexed, the chatbot says so instead of answering from another video
+- Added a cache-only transcript viewer
+    - Lists transcripts already saved in SQLite
+    - Displays native/saved language metadata, publication date, duration, and timestamped segments when available
+    - Legacy plain-text transcripts remain viewable without invented timestamps
+    - Opening the transcript viewer never triggers a YouTube transcript request
+- Added standalone utility: `youtube_transcriptor.py`
+    - Processes channel videos outside the web UI
+    - Retrieves original/native caption tracks and saves them to SQLite
+    - Reuses cached transcripts and preserves successful work if YouTube blocks later requests
+- Added standalone utility: `rag_builder.py`
+    - Reads saved SQLite transcripts only
+    - Chunks, embeds, and writes them to persistent Chroma
+    - Supports `--rebuild` after embedding/chunking changes
+- Added `rag_evaluation.py`
+    - Exercises English, Spanish, Telugu, arbitrary target-language output (including Japanese), cross-language response, and single-video retrieval cases
+    - Does not retrieve new YouTube transcripts
+
 ## Authors
 - Ashley Zenzola
 - Chee Vang
@@ -244,7 +276,7 @@ Optional Chroma/RAG settings:
 ```text
 CHROMA_PATH=data/chroma_db
 CHROMA_COLLECTION_NAME=youtube_transcript_chunks
-RAG_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+RAG_EMBEDDING_MODEL=intfloat/multilingual-e5-small
 RAG_CHUNKING_VERSION=v1
 ```
 
@@ -334,11 +366,16 @@ GET /api/rag/stats?channel_id=UC_CHANNEL_ID
 - Multiple retrieved chunks from one video may still be used by Gemini, but the video is displayed once in the source list.
 
 ## Known Limitations
-- `youtube-transcript-api` may still be blocked by YouTube after frequent requests or depending on the network/IP. The application now stops the batch and displays a UI warning instead of continuing live requests after a known block.
-- Videos without an available transcript cannot currently be indexed through the normal transcript path.
-- RAG currently considers only the configured number of recent videos for new indexing.
-- Chroma data is local to `data/chroma_db/`; deployed persistent reuse requires persistent storage.
-- Gemini requires a valid API key and can occasionally be unavailable because of provider demand.
+
+| Tool / Service | limitation | Impact on this project | Current mitigation |
+| --- | --- | --- | --- |
+| `youtube-transcript-api` | may still be blocked by YouTube after frequent requests or depending on the network/IP. | A large channel may stop processing before every transcript is retrieved. | Save every successful transcript to SQLite. Add a delay between request. RAG building is from saved transcripts.|
+| YouTube Data API v3 | default daily quota cost(10,000/day). Each page require additional requests | Large channels, repeat analysis, or repeated development/testing can use a lot of daily quota and prevent channel/video metadata retrieval | Cache channel and video metadata in SQLite. Reuse previously retrieved data, avoid unneccessary repeated request and process what is needed during testing |
+| Gemini API free tier | Gemini requires a valid API key and can occasionally be unavailable because of provider demand. | Chatbot may be unable to generate answers even when chroma retrieves the correct chunks. Large retrieved context uses more tokens | Keeps retrieveal and generation separate and preserve a retreval/fallback path so indexed content is not lost when Gemini is unavaliable |
+| `intfloat/Multilingual-e5-small`/ Sentence Transformers | Low-performance PC may struggle because of CPU/RAM/Disk usage. Has 100 languages, but retrieval quality can vary for lower-resource language. Model has a finite input length, so long transcripts need to be chunked. | Inital setup can be slower. CPU only computer and multilingual retrieval quality is not identical for evey supported language | Chunk transcripts before embedding. Persist embeddings in Chroma so they're not recreated every question. track the embedding model in metadata and rebuild from cached SQLite transcripts when the embedding model changes |
+| Chroma | Only limits are computer's disk pace, memory and processing speed | A large transcript collection can increase local storage and retrieval/indexing time. | Reuse persistent local collections, avoid duplicate indexing, store metadata, and use persistent storage if the app is deployed |
+| SQLite | limited concurrent-write scalability compared with PostgreSQL or other server databases | may become a bottleneck if many users attempted to write transcripts/channel data at the same time in a production deployment | Keeps SQLite for local caching and preprocessing. A production version could replace the database service with PostgreSQL without changing the RAG architecture |
+
 
 ## Testing Evidence
 - Confirmed SQLite transcript reuse prints `Using cached transcript from SQLite: VIDEO_ID` instead of downloading the same transcript again.
@@ -364,3 +401,32 @@ GET /api/rag/stats?channel_id=UC_CHANNEL_ID
 - `data/youtube_analyzer.db` - SQLite cache created by the application
 - `data/chroma_db/` - Persistent Chroma storage created by the application
 - `data/test_transcripts.json` - Local transcript data used by RAG test mode
+
+
+### Transcript utility
+
+```powershell
+python youtube_transcriptor.py UC_CHANNEL_ID --limit 0
+```
+
+This writes/reuses raw transcripts in SQLite. `--limit 0` means all available videos.
+
+### RAG builder
+
+```powershell
+python rag_builder.py UC_CHANNEL_ID --limit 0
+```
+
+This reads SQLite transcripts and builds Chroma without requesting transcripts from YouTube. To rebuild after changing the embedding model:
+
+```powershell
+python rag_builder.py UC_CHANNEL_ID --rebuild
+```
+
+### Multilingual / RAG evaluation
+
+```powershell
+python rag_evaluation.py UC_CHANNEL_ID
+```
+
+The evaluation covers English, Spanish, Telugu, an additional arbitrary target language (Japanese), explicit cross-language output, and a specific-video retrieval isolation check.

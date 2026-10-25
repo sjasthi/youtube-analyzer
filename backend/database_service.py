@@ -417,3 +417,66 @@ def get_database_stats():
         "video_count": video_count,
         "database_path": str(DATABASE_PATH),
     }
+
+
+def get_saved_transcripts_for_channel(channel_id, include_text=False):
+    """Return cached transcript rows joined with video metadata for one channel.
+
+    This helper is cache-only: it never contacts YouTube. It is used by the
+    transcript viewer and the standalone RAG builder.
+    """
+    fields = """
+        t.video_id,
+        t.channel_id,
+        t.language,
+        t.segments_json,
+        t.last_updated AS transcript_last_updated,
+        v.title,
+        v.published_at,
+        v.duration_seconds,
+        v.default_language,
+        v.default_audio_language
+    """
+    if include_text:
+        fields += ", t.transcript"
+
+    with get_connection() as connection:
+        rows = connection.execute(
+            f"""
+            SELECT {fields}
+            FROM transcripts AS t
+            JOIN videos AS v ON v.video_id = t.video_id
+            WHERE t.channel_id = ?
+            ORDER BY v.published_at DESC
+            """,
+            (channel_id,),
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def get_saved_transcript_with_video(video_id):
+    """Return one cached transcript joined with its video metadata."""
+    with get_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT
+                t.video_id,
+                t.channel_id,
+                t.transcript,
+                t.language,
+                t.segments_json,
+                t.last_updated AS transcript_last_updated,
+                v.title,
+                v.published_at,
+                v.duration_seconds,
+                v.default_language,
+                v.default_audio_language
+            FROM transcripts AS t
+            JOIN videos AS v ON v.video_id = t.video_id
+            WHERE t.video_id = ?
+            """,
+            (video_id,),
+        ).fetchone()
+
+    return dict(row) if row is not None else None

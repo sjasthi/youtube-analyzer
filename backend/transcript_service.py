@@ -313,6 +313,30 @@ def get_video_transcripts(videos, channel_id):
     return get_video_transcripts_with_status(videos, channel_id)["transcripts"]
 
 
+def get_cached_video_transcripts(videos: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return transcript records from SQLite only, without contacting YouTube."""
+    transcripts: list[dict[str, Any]] = []
+    missing_video_ids: list[str] = []
+
+    for video in videos:
+        video_id = str(video.get("video_id") or "")
+        if not video_id:
+            continue
+
+        saved = get_saved_transcript(video_id)
+        if saved is None:
+            missing_video_ids.append(video_id)
+            continue
+
+        transcripts.append(_saved_transcript_record(saved, video))
+
+    return {
+        "transcripts": transcripts,
+        "cached_transcript_count": len(transcripts),
+        "missing_video_ids": missing_video_ids,
+    }
+
+
 if __name__ == "__main__":
     from backend.youtube_service import get_all_videos
 

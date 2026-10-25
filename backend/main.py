@@ -2,18 +2,21 @@
 
 import json # For testing RAG
 import os
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.analytics_service import calculate_analytics
 from backend.database_service import (
     get_cached_channel_data,
     get_database_stats,
+    get_saved_transcripts_for_channel,
+    get_saved_transcript_with_video,
     initialize_database,
     is_cache_fresh,
     save_channel_and_videos,
@@ -21,11 +24,15 @@ from backend.database_service import (
 
 from backend.youtube_service import get_all_videos, resolve_channel_id
 from backend.transcript_service import (
+    get_cached_video_transcripts,
     get_video_transcripts,
     get_video_transcripts_with_status,
 )
 from backend.rag_service import (
+    EMBEDDING_MODEL_NAME,
     answer_question as run_rag_question,
+    channel_requires_embedding_rebuild,
+    delete_channel_index,
     enrich_indexed_video_metadata,
     get_indexed_video_ids,
     get_rag_storage_stats,
@@ -115,6 +122,8 @@ def resolve_channel(channel_input: str):
 class QuestionRequest(BaseModel):
     channel_id: str
     question: str
+    answer_language: str = Field(default="auto", max_length=80)
+    video_id: str | None = None
 
 
 class RagIndexRequest(BaseModel):
@@ -178,6 +187,55 @@ def get_latest_video(videos: list[dict]) -> dict | None:
     if not dated:
         return videos[0] if videos else None
     return max(dated, key=lambda video: str(video.get("published_at")))
+
+
+def _normalise_title_text(value: str) -> str:
+    """Normalise user/title text for conservative title matching."""
+    return " ".join(re.findall(r"[\w]+", str(value or "").lower(), flags=re.UNICODE))
+
+
+def find_requested_video(question: str, videos: list[dict]) -> dict | None:
+    """Find a video explicitly named in a question.
+
+    Matching is deliberately conservative: a full title must appear in the
+    question, or a quoted phrase must clearly match part of one title. This
+    avoids incorrectly forcing ordinary topic questions onto a random video.
+    """
+    clean_question = str(question or "")
+    normalised_question = _normalise_title_text(clean_question)
+
+    # Direct video IDs are unambiguous.
+    for video in videos:
+        video_id = str(video.get("video_id") or "")
+        if len(video_id) >= 8 and video_id in clean_question:
+            return video
+
+    exact_matches: list[tuple[int, dict]] = []
+    for video in videos:
+        title = str(video.get("title") or "").strip()
+        normalised_title = _normalise_title_text(title)
+        if len(normalised_title) >= 4 and normalised_title in normalised_question:
+            exact_matches.append((len(normalised_title), video))
+
+    if exact_matches:
+        return max(exact_matches, key=lambda item: item[0])[1]
+
+    # Quoted partial titles such as: What is "Python Basics" about?
+    quoted_phrases = re.findall(r'["“”]([^"“”]{3,})["“”]', clean_question)
+    for phrase in quoted_phrases:
+        normalised_phrase = _normalise_title_text(phrase)
+        if not normalised_phrase:
+            continue
+        candidates = []
+        for video in videos:
+            title = str(video.get("title") or "")
+            normalised_title = _normalise_title_text(title)
+            if normalised_phrase in normalised_title or normalised_title in normalised_phrase:
+                candidates.append((len(normalised_title), video))
+        if candidates:
+            return min(candidates, key=lambda item: item[0])[1]
+
+    return None
 
 
 def get_missing_rag_videos(channel_id, videos):
@@ -292,6 +350,8 @@ def index_rag_content(request: RagIndexRequest):
                 item.setdefault("transcript_source", "test_file")
 
         try:
+            if channel_requires_embedding_rebuild(rag_channel_id):
+                delete_channel_index(rag_channel_id)
             index_summary = index_transcripts(
                 rag_channel_id,
                 test_transcripts,
@@ -322,7 +382,41 @@ def index_rag_content(request: RagIndexRequest):
             },
         }
 
+    rebuilt_for_embedding_model = False
     try:
+        # Multilingual retrieval requires transcript chunks and questions to be
+        # embedded by the same model. If an older index exists, preserve every
+        # previously indexed video during the rebuild even when the current
+        # RAG_TRANSCRIPT_VIDEO_LIMIT is smaller than the old index.
+        if channel_requires_embedding_rebuild(channel_id):
+            all_videos = result["videos"]
+            previous_indexed_ids = get_indexed_video_ids(
+                channel_id,
+                [video["video_id"] for video in all_videos],
+            )
+            selected_ids = {str(video["video_id"]) for video in videos}
+            rebuild_ids = previous_indexed_ids | selected_ids
+            rebuild_videos = [
+                video for video in all_videos
+                if str(video.get("video_id")) in rebuild_ids
+            ]
+
+            # A normally indexed video should always have its raw transcript in
+            # SQLite. Refuse to destroy the old Chroma copy if that invariant is
+            # broken, because re-downloading it may be blocked by YouTube.
+            cached_check = get_cached_video_transcripts(rebuild_videos)
+            missing_cached = set(cached_check["missing_video_ids"]) & previous_indexed_ids
+            if missing_cached:
+                raise RuntimeError(
+                    "Cannot safely rebuild the multilingual RAG index because "
+                    "some previously indexed transcripts are missing from SQLite: "
+                    + ", ".join(sorted(missing_cached))
+                )
+
+            delete_channel_index(channel_id)
+            videos = rebuild_videos
+            rebuilt_for_embedding_model = True
+
         # Existing Chroma databases created by earlier versions can gain
         # publication-date/language metadata without re-embedding their chunks.
         enrich_indexed_video_metadata(
@@ -373,6 +467,8 @@ def index_rag_content(request: RagIndexRequest):
         "status": "success",
         "rag_test_mode": False,
         "rag_storage": "chroma",
+        "embedding_model": EMBEDDING_MODEL_NAME,
+        "rebuilt_for_embedding_model": rebuilt_for_embedding_model,
         "requested_video_count": len(videos),
         "indexed_video_count": len(indexed_after),
         "missing_video_count_before_request": len(missing_videos),
@@ -449,51 +545,92 @@ def ask_question(request: QuestionRequest):
             "rag_test_mode": RAG_TEST_MODE,
         }
 
-    target_video_id = None
-    query_scope = "channel"
+    # Do not query an old index with a different embedding model. The Index
+    # action can rebuild it from the SQLite transcript cache without requiring
+    # those cached transcripts to be downloaded again.
+    if channel_requires_embedding_rebuild(rag_channel_id):
+        return {
+            "answer": (
+                "This channel's RAG index was created with an older embedding "
+                "model. Click 'Index RAG Content' once to rebuild it for "
+                "multilingual retrieval using the cached transcripts."
+            ),
+            "sources": [],
+            "retrieved_chunk_count": 0,
+            "mode": "embedding_rebuild_required",
+            "generation_provider": None,
+            "generation_model": None,
+            "generation_warning": None,
+            "indexed_video_count": indexed_video_count,
+            "query_scope": "channel",
+            "rag_storage": "chroma",
+            "rag_test_mode": RAG_TEST_MODE,
+            "transcript_source": "chroma_only",
+            "transcript_status": {
+                "severity": "info",
+                "blocked": False,
+                "indexed_video_count": indexed_video_count,
+                "message": "Rebuild the existing RAG index for multilingual embeddings.",
+            },
+        }
 
-    # Semantic similarity alone cannot interpret words such as "latest" as a
-    # date comparison. Resolve that intent using the cached YouTube metadata,
-    # then restrict Chroma to the actual newest video's transcript chunks.
-    if not RAG_TEST_MODE and question_requests_latest_video(question):
-        cached_channel = get_cached_channel_data(channel_id)
-        latest_video = get_latest_video((cached_channel or {}).get("videos", []))
+    target_video_id = request.video_id.strip() if request.video_id else None
+    query_scope = "selected_video" if target_video_id else "channel"
+    matched_video_title = None
+    cached_channel = get_cached_channel_data(channel_id) if not RAG_TEST_MODE else None
+    cached_videos = (cached_channel or {}).get("videos", [])
+
+    # Semantic similarity cannot interpret recency as a date comparison. Resolve
+    # the newest video from cached metadata and filter Chroma to that video.
+    if not target_video_id and not RAG_TEST_MODE and question_requests_latest_video(question):
+        latest_video = get_latest_video(cached_videos)
 
         if latest_video is not None:
             target_video_id = str(latest_video["video_id"])
+            matched_video_title = latest_video.get("title")
             query_scope = "latest_video"
-            latest_is_indexed = bool(
-                get_indexed_video_ids(channel_id, [target_video_id])
-            )
 
-            if not latest_is_indexed:
-                return {
-                    "answer": (
-                        f"The most recent video, '{latest_video.get('title') or 'Unknown video'}', "
-                        "has not been indexed for RAG yet. Use 'Index RAG Content' "
-                        "to try indexing it before asking this question again."
-                    ),
-                    "sources": [],
-                    "retrieved_chunk_count": 0,
-                    "mode": "latest_video_not_indexed",
-                    "generation_provider": None,
-                    "generation_model": None,
-                    "generation_warning": None,
+    # If the user explicitly names a video title, constrain retrieval to that
+    # video's chunks instead of allowing semantically similar videos to leak in.
+    if not target_video_id and not RAG_TEST_MODE:
+        requested_video = find_requested_video(question, cached_videos)
+        if requested_video is not None:
+            target_video_id = str(requested_video["video_id"])
+            matched_video_title = requested_video.get("title")
+            query_scope = "specific_video"
+
+    if target_video_id and not RAG_TEST_MODE:
+        target_is_indexed = bool(get_indexed_video_ids(channel_id, [target_video_id]))
+        if not target_is_indexed:
+            target_video = next(
+                (video for video in cached_videos if str(video.get("video_id")) == target_video_id),
+                None,
+            )
+            target_title = (target_video or {}).get("title") or matched_video_title or "Requested video"
+            return {
+                "answer": (
+                    f"The requested video, '{target_title}', has not been indexed "
+                    "for RAG yet. Use 'Index RAG Content' first."
+                ),
+                "sources": [],
+                "retrieved_chunk_count": 0,
+                "mode": "target_video_not_indexed",
+                "generation_provider": None,
+                "generation_model": None,
+                "generation_warning": None,
+                "indexed_video_count": indexed_video_count,
+                "transcript_source": "chroma_only",
+                "query_scope": query_scope,
+                "matched_video_title": target_title,
+                "transcript_status": {
+                    "severity": "info",
+                    "blocked": False,
                     "indexed_video_count": indexed_video_count,
-                    "transcript_source": "chroma_only",
-                    "query_scope": query_scope,
-                    "transcript_status": {
-                        "severity": "info",
-                        "blocked": False,
-                        "indexed_video_count": indexed_video_count,
-                        "message": (
-                            "The newest channel video is not currently indexed. "
-                            "No YouTube transcript request was made by this question."
-                        ),
-                    },
-                    "rag_storage": "chroma",
-                    "rag_test_mode": RAG_TEST_MODE,
-                }
+                    "message": "The requested video is not currently indexed. No YouTube transcript request was made.",
+                },
+                "rag_storage": "chroma",
+                "rag_test_mode": RAG_TEST_MODE,
+            }
 
     try:
         rag_result = run_rag_question(
@@ -501,6 +638,7 @@ def ask_question(request: QuestionRequest):
             question=question,
             transcripts=[],
             target_video_id=target_video_id,
+            answer_language=request.answer_language,
         )
     except (RuntimeError, ValueError) as error:
         raise HTTPException(status_code=500, detail=str(error))
@@ -524,6 +662,8 @@ def ask_question(request: QuestionRequest):
         "rag_storage": "chroma",
         "rag_test_mode": RAG_TEST_MODE,
         "query_scope": query_scope,
+        "matched_video_title": matched_video_title,
+        "answer_language": request.answer_language,
     }
 
 
@@ -653,6 +793,63 @@ def get_channel_transcripts(channel_id: str):
     return {
         "transcripts": transcripts,
         "transcript_count": len(transcripts),
+    }
+
+
+@app.get("/api/channel/{channel_id}/cached-transcripts")
+def cached_transcript_list(channel_id: str):
+    """List transcripts already stored in SQLite without contacting YouTube."""
+    rows = get_saved_transcripts_for_channel(channel_id, include_text=False)
+    items = []
+    for row in rows:
+        segments = []
+        if row.get("segments_json"):
+            try:
+                decoded = json.loads(row["segments_json"])
+                if isinstance(decoded, list):
+                    segments = decoded
+            except (TypeError, json.JSONDecodeError):
+                segments = []
+
+        items.append({
+            "video_id": row["video_id"],
+            "title": row.get("title") or "Unknown video",
+            "language": row.get("language") or row.get("default_audio_language") or row.get("default_language"),
+            "published_at": row.get("published_at"),
+            "duration_seconds": row.get("duration_seconds"),
+            "has_timestamps": bool(segments),
+            "transcript_last_updated": row.get("transcript_last_updated"),
+        })
+
+    return {"channel_id": channel_id, "transcript_count": len(items), "transcripts": items}
+
+
+@app.get("/api/transcript/{video_id}")
+def cached_transcript(video_id: str):
+    """Return one cached transcript for the viewer; never fetch from YouTube."""
+    row = get_saved_transcript_with_video(video_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Cached transcript was not found.")
+
+    segments = []
+    if row.get("segments_json"):
+        try:
+            decoded = json.loads(row["segments_json"])
+            if isinstance(decoded, list):
+                segments = decoded
+        except (TypeError, json.JSONDecodeError):
+            segments = []
+
+    return {
+        "video_id": row["video_id"],
+        "channel_id": row["channel_id"],
+        "title": row.get("title") or "Unknown video",
+        "language": row.get("language") or row.get("default_audio_language") or row.get("default_language"),
+        "published_at": row.get("published_at"),
+        "duration_seconds": row.get("duration_seconds"),
+        "transcript": row.get("transcript") or "",
+        "segments": segments,
+        "has_timestamps": bool(segments),
     }
 
 

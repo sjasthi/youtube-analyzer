@@ -247,6 +247,38 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 table { width: 100%; border-collapse: collapse; color: var(--text); }
 th, td { padding: 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
 th { background: var(--surface-secondary); }
+.video-thumbnail-cell {
+    width: 136px;
+    min-width: 136px;
+}
+.video-thumbnail {
+    display: block;
+    width: 120px;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+}
+.video-thumbnail-cell a {
+    display: inline-block;
+    border-radius: 6px;
+}
+.video-thumbnail-cell a:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: 2px;
+}
+.thumbnail-unavailable {
+    display: inline-flex;
+    width: 120px;
+    aspect-ratio: 16 / 9;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface-secondary);
+    color: var(--muted);
+    font-size: 12px;
+}
 .video-cell { min-width: 280px; }
 .video-id { display: block; color: var(--muted); font-size: 12px; margin-top: 4px; }
 
@@ -515,4 +547,47 @@ html.dark-mode table.dataTable tbody tr:hover > * {
 .toggle-icon {
     font-size: 1.2em;
     padding-left: 10px;
+}
+
+/* Multilingual Q&A and cache-only transcript viewer. */
+#answerLanguage {
+    flex: 0 1 250px;
+    min-width: 220px;
+}
+
+.transcript-viewer-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+#transcriptVideoSelect {
+    flex: 1;
+    min-width: 0;
+}
+
+.transcript-viewer-meta {
+    margin: 10px 0;
+    font-size: 0.9rem;
+}
+
+.transcript-viewer-text {
+    margin: 0;
+    padding: 16px;
+    max-height: 420px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--surface-secondary);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: Arial, sans-serif;
+    line-height: 1.55;
+}
+
+@media (max-width: 650px) {
+    .transcript-viewer-controls { flex-direction: column; align-items: stretch; }
+    #answerLanguage { width: 100%; }
 }
