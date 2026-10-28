@@ -126,7 +126,7 @@
 - Matched video link colors to the links in the Recent Videos section
 
 <b>FP7</b>
-- Thumbnails to 'Recent Videos'
+- Thumbnails to 'Recent Videos' and 'Video Sample Analytics' sections
 - Added multilingual RAG support
     - Default local embedding model changed to `intfloat/multilingual-e5-small` for cross-language semantic retrieval
     - Auto response mode answers in the same language as the user's question unless another language is explicitly requested
