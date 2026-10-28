@@ -63,6 +63,7 @@ const transcriptViewerText = document.getElementById("transcriptViewerText");
 
 // Default messages for the question and answer section
 const defaultAnswer = "The answer will appear here.";
+const defaultSources = "<li>Sources will appear here after you ask a question.</li>";
 
 // Store the current Chart.js object so it can be replaced on the next search.
 let uploadTrendChart = null;
@@ -543,7 +544,7 @@ async function analyzeChannel() {
     activeChannelId = null;
     questionInput.value = "";
     answerText.textContent = defaultAnswer;
-    answerSources.innerHTML = "<li>Sources will appear here after you ask a question.</li>";
+    answerSources.innerHTML = defaultSources;
     askQuestionButton.disabled = true;
     errorMessage.classList.add("hidden");
     channelSection.classList.add("hidden");
@@ -927,10 +928,11 @@ questionInput.addEventListener("keydown", event => {
     if (event.key === "Enter") askQuestion();
 });
 
-// Clears the question and answer
+// Clears the question, answer, and sources
 clearQuestionButton.addEventListener("click", () => {
     questionInput.value = "";
     answerText.textContent = defaultAnswer;
+    answerSources.innerHTML = defaultSources;
     transcriptStatus.textContent = "";
     transcriptStatus.className = "transcript-status hidden";
     askQuestionButton.disabled = true;
