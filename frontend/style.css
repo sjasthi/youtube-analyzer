@@ -591,3 +591,24 @@ html.dark-mode table.dataTable tbody tr:hover > * {
     .transcript-viewer-controls { flex-direction: column; align-items: stretch; }
     #answerLanguage { width: 100%; }
 }
+
+/* Thumbnail appearance in analytics sections */
+.analytics-video-thumbnail {
+    width: 150px;
+    height: auto;
+    border-radius: 6px;
+}
+
+/* Keep analytics thumbnails and titles side by side */
+#mostViewedTitle,
+#mostLikedTitle {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+#mostViewedTitle .analytics-video-thumbnail,
+#mostLikedTitle .analytics-video-thumbnail {
+    flex-shrink: 0;
+    margin-right: 0;
+}

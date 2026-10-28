@@ -209,6 +209,7 @@ function displayAnalytics(analytics) {
     if (analytics.most_viewed_video) {
         const video = analytics.most_viewed_video;
         const videoLink = document.createElement("a");
+        const thumbnail = document.createElement("img");
 
         videoLink.href = `https://www.youtube.com/watch?v=${encodeURIComponent(video.video_id)}`;
         videoLink.target = "_blank";
@@ -216,13 +217,18 @@ function displayAnalytics(analytics) {
         videoLink.className = "video-title";
         videoLink.textContent = video.title;
 
-        mostViewedTitle.replaceChildren(videoLink);
+        thumbnail.src = `https://img.youtube.com/vi/${encodeURIComponent(video.video_id)}/mqdefault.jpg`;
+        thumbnail.alt = `Thumbnail for ${video.title}`;
+        thumbnail.className = "analytics-video-thumbnail";
+
+        mostViewedTitle.replaceChildren(thumbnail, videoLink);
         mostViewedValue.textContent = `${formatNumber(video.view_count)} views`;
     }
 
     if (analytics.most_liked_video) {
         const video = analytics.most_liked_video;
         const videoLink = document.createElement("a");
+        const thumbnail = document.createElement("img");
 
         videoLink.href = `https://www.youtube.com/watch?v=${encodeURIComponent(video.video_id)}`;
         videoLink.target = "_blank";
@@ -230,7 +236,11 @@ function displayAnalytics(analytics) {
         videoLink.className = "video-title";
         videoLink.textContent = video.title;
 
-        mostLikedTitle.replaceChildren(videoLink);
+        thumbnail.src = `https://img.youtube.com/vi/${encodeURIComponent(video.video_id)}/mqdefault.jpg`;
+        thumbnail.alt = `Thumbnail for ${video.title}`;
+        thumbnail.className = "analytics-video-thumbnail";
+
+        mostLikedTitle.replaceChildren(thumbnail, videoLink);
         mostLikedValue.textContent = `${formatNumber(video.like_count)} likes`;
     }
 
