@@ -51,6 +51,15 @@
 - Added transcript retrieval
 - Saved retrieved transcripts in SQLite for reuse
 - Added source video links to answers
+
+- Added analytics-aware chatbot queries
+    - Questions such as `What is the most liked video?`, `Which video has the most views?`, and `Which video has the most comments?` are answered directly from cached SQLite video analytics rather than transcript text
+    - Supports most/highest/top and least/fewest/lowest ranking forms, including requests such as `Top 5 most liked videos`
+    - The selected analytics result becomes the active in-memory video scope, so a follow-up such as `What is it about?` can switch back to transcript RAG for that video
+    - Analytics questions do not require the selected video to be indexed in Chroma; only transcript-content follow-ups require RAG indexing
+- Removed the separate **Latest Sources** panel from the chatbot
+    - Each assistant message keeps its own source video links/timestamps directly under that answer
+    - This avoids duplicated or stale source information during follow-up questions and multi-video comparisons
 - Filtered out less relevant transcript chunks
 
 <b>FP6</b>
@@ -66,7 +75,6 @@
 - Test transcript data is stored under a separate Chroma namespace so it does not mix with live channel data
 - Source video links are deduplicated so several retrieved chunks from the same video show one source video
 - Added `/api/rag/stats` to inspect persistent Chroma storage
-- Improved DataTables pagination styling so the active page number remains readable in light and dark mode
 - Added safer live transcript batch retrieval
     - SQLite and Chroma cache hits remain immediate
     - New YouTube transcript requests are paced with a configurable delay and small random jitter
@@ -76,24 +84,16 @@
     - Successfully retrieved transcripts are saved to SQLite before the batch stops
     - Already-indexed Chroma videos remain available for RAG
 - Added transcript status information to the Q&A UI
-    - Shows how many selected videos are currently indexed for RAG
-    - Shows a clear warning if YouTube temporarily blocks transcript retrieval
-    - Explains that cached/indexed videos are still usable and that indexing can continue later
-- Added configurable transcript pacing settings:
-    - `TRANSCRIPT_REQUEST_DELAY_SECONDS`
-    - `TRANSCRIPT_REQUEST_JITTER_SECONDS`
 - Separated RAG indexing from RAG question answering
     - Added an explicit **Index RAG Content** button
     - Indexing is the only normal UI action that retrieves missing transcripts
     - Asking a question searches existing Chroma content only and never retries YouTube
-- If transcript indexing stops early (for example, 14 of 15 videos), RAG can still answer questions from the 14 videos already indexed
 - Missing/blocked videos are not automatically retried on every question
 - Added RAG coverage information after channel analysis so users can see whether the channel already has indexed content
 - Added `POST /api/rag/index` for explicit transcript retrieval + Chroma indexing
 - Added richer RAG source metadata
     - Chroma chunks now support `published_at`, `language`, `start_time`, and `end_time`
     - New transcript retrievals preserve YouTube caption language and timing segments in SQLite
-    - Existing Chroma chunks can be enriched with publication date/language metadata without re-embedding
 - Added timestamp-aware RAG sources
     - Source links jump to the approximate transcript chunk timestamp when timing data is available
     - The Q&A source list shows timestamp, language, publication date, and video duration when available
@@ -104,17 +104,6 @@
     - Uses video `published_at` metadata instead of semantic similarity alone
     - Restricts retrieval to the actual newest indexed video
     - If the newest video is not indexed, the chatbot explains that instead of silently answering from an older video
-- Expanded Chroma metadata for RAG maintenance and richer filtering
-    - Added `channel_title`
-    - Added numeric `published_timestamp`
-    - Added `duration_seconds`
-    - Added `indexed_at`
-    - Added `transcript_source`
-    - Added SHA-256 `transcript_hash`
-    - Added `embedding_model`
-    - Added configurable `chunking_version`
-    - Added `metadata_version`
-- Existing Chroma records can be enriched with recoverable channel/video metadata without re-embedding
 - Legacy metadata that cannot be reconstructed reliably is labeled `legacy_unknown` rather than guessed
 - `/api/rag/stats` now reports stored embedding models, chunking versions, transcript sources, and metadata versions
 - Source details can now also display video duration
@@ -126,16 +115,13 @@
 - Matched video link colors to the links in the Recent Videos section
 
 <b>FP7</b>
-- Thumbnails to 'Recent Videos'
+- Thumbnails to 'Recent Videos' and 'Video Sample Analytics' sections
 - Added multilingual RAG support
     - Default local embedding model changed to `intfloat/multilingual-e5-small` for cross-language semantic retrieval
     - Auto response mode answers in the same language as the user's question unless another language is explicitly requested
     - Leave the Answer language field blank for Auto, or type a language such as French, Japanese, Arabic, Hindi, Korean, or Portuguese (Brazil)
     - The Q&A UI accepts any target language name as free text; leave it blank for Auto mode
     - English questions can retrieve non-English transcript content and vice versa when the multilingual embeddings find relevant chunks
-- Added embedding-model compatibility checks
-    - Existing Chroma data built with another embedding model is not queried with incompatible embeddings
-    - **Index RAG Content** rebuilds that channel using cached SQLite transcripts first
 - Added specific-video question handling
     - Questions that explicitly contain a full video title or a quoted partial title are mapped to that video's `video_id`
     - Chroma retrieval is then restricted to that video only
@@ -156,6 +142,25 @@
 - Added `rag_evaluation.py`
     - Exercises English, Spanish, Telugu, arbitrary target-language output (including Japanese), cross-language response, and single-video retrieval cases
     - Does not retrieve new YouTube transcripts
+
+<b>FP8</b>
+- Make chatbot/RAG smarter
+    - a Popup chat box
+    - Keep queried questions until session is terminated
+    - Removed latest source as it was redundant
+    - Follow-up questions can remember previous video(s)
+    - Changed `clear chat` to `new chat`
+    - RAG now recognize basic questions about analytics
+    - Can decide when to use metadata or transcript content
+    - Able to compare videos
+    - Removed language seletion field
+- Recent videos list
+    - added status of transcript and RAG
+    - Lets users know if video is short or regular
+    - Can index a specific video by clicking on white index button
+
+
+
 
 ## Authors
 - Ashley Zenzola
@@ -425,8 +430,19 @@ python rag_builder.py UC_CHANNEL_ID --rebuild
 
 ### Multilingual / RAG evaluation
 
+Run it from the project root:
+
 ```powershell
 python rag_evaluation.py UC_CHANNEL_ID
 ```
 
 The evaluation covers English, Spanish, Telugu, an additional arbitrary target language (Japanese), explicit cross-language output, and a specific-video retrieval isolation check.
+`rag_evaluation.py` now prints explicit PASS/FAIL checks for:
+
+- multilingual retrieval/generation cases
+- retrieval returning source chunks
+- newest-video source isolation
+- specific-video source isolation
+- two-video comparison source coverage
+
+Language fluency and semantic correctness still require human review; the automated harness verifies retrieval/scope behavior and whether an answer was produced.

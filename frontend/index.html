@@ -136,181 +136,27 @@
             </div>
         </section>
         
-        <!-- Ask questions about the channel -->
-        <section id = "questionSection" class = "card hidden">
+        <!-- RAG controls. Conversation itself opens in a popup chatbot. -->
+        <section id="questionSection" class="card hidden">
             <button type="button" class="section-toggle" aria-expanded="true" aria-controls="questionContent">
-                <span>Enter a Question</span>
+                <span>RAG Chatbot</span>
                 <span class="toggle-icon" aria-hidden="true">−</span>
             </button>
-
             <div id="questionContent" class="collapsible-content">
-                <p class = "note">Ask questions using transcript content that has already been indexed in Chroma.</p>
-                
-                    <div class="rag-index-row">
+                <p class="note">Build the RAG index here, then open the popup chatbot. Asking questions reads existing Chroma content only.</p>
+                <div class="rag-index-row">
                     <button id="indexRagButton" type="button">Index RAG Content</button>
-                    <span class="note">Indexing retrieves only missing transcripts. Asking questions does not contact YouTube.</span>
+                    <button id="cancelIndexButton" type="button" class="secondary-button hidden">Stop Processing</button>
+                    <button id="openChatButton" type="button">Open Chatbot</button>
                 </div>
-
-                <div class = "question-row">
-                    <input
-                        id = "questionInput"
-                        type = "text"
-                        placeholder = "Example: What topics are discussed in these videos?"
-                    >
-                    <input
-                        id="answerLanguage"
-                        type="text"
-                        list="answerLanguageOptions"
-                        maxlength="80"
-                        autocomplete="off"
-                        placeholder="Answer language (blank = Auto)"
-                        aria-label="Answer language; type to search the language list or leave blank for automatic language matching"
-                        title="Type to search supported language suggestions. Leave blank for Auto. You can still type another language for experimental use."
-                    >
-                    <datalist id="answerLanguageOptions">
-                        <option value="Auto"></option>
-                        <option value="Afrikaans"></option>
-                        <option value="Albanian"></option>
-                        <option value="Amharic"></option>
-                        <option value="Arabic"></option>
-                        <option value="Armenian"></option>
-                        <option value="Assamese"></option>
-                        <option value="Azerbaijani"></option>
-                        <option value="Basque"></option>
-                        <option value="Belarusian"></option>
-                        <option value="Bengali"></option>
-                        <option value="Bengali Romanized"></option>
-                        <option value="Bosnian"></option>
-                        <option value="Breton"></option>
-                        <option value="Bulgarian"></option>
-                        <option value="Burmese"></option>
-                        <option value="Burmese (Zawgyi)"></option>
-                        <option value="Catalan"></option>
-                        <option value="Chinese (Simplified)"></option>
-                        <option value="Chinese (Traditional)"></option>
-                        <option value="Croatian"></option>
-                        <option value="Czech"></option>
-                        <option value="Danish"></option>
-                        <option value="Dutch"></option>
-                        <option value="English"></option>
-                        <option value="Esperanto"></option>
-                        <option value="Estonian"></option>
-                        <option value="Filipino"></option>
-                        <option value="Finnish"></option>
-                        <option value="French"></option>
-                        <option value="Galician"></option>
-                        <option value="Georgian"></option>
-                        <option value="German"></option>
-                        <option value="Greek"></option>
-                        <option value="Gujarati"></option>
-                        <option value="Hausa"></option>
-                        <option value="Hebrew"></option>
-                        <option value="Hindi"></option>
-                        <option value="Hindi Romanized"></option>
-                        <option value="Hungarian"></option>
-                        <option value="Icelandic"></option>
-                        <option value="Indonesian"></option>
-                        <option value="Irish"></option>
-                        <option value="Italian"></option>
-                        <option value="Japanese"></option>
-                        <option value="Javanese"></option>
-                        <option value="Kannada"></option>
-                        <option value="Kazakh"></option>
-                        <option value="Khmer"></option>
-                        <option value="Korean"></option>
-                        <option value="Kurdish (Kurmanji)"></option>
-                        <option value="Kyrgyz"></option>
-                        <option value="Lao"></option>
-                        <option value="Latin"></option>
-                        <option value="Latvian"></option>
-                        <option value="Lithuanian"></option>
-                        <option value="Macedonian"></option>
-                        <option value="Malagasy"></option>
-                        <option value="Malay"></option>
-                        <option value="Malayalam"></option>
-                        <option value="Marathi"></option>
-                        <option value="Mongolian"></option>
-                        <option value="Nepali"></option>
-                        <option value="Norwegian"></option>
-                        <option value="Oriya"></option>
-                        <option value="Oromo"></option>
-                        <option value="Pashto"></option>
-                        <option value="Persian"></option>
-                        <option value="Polish"></option>
-                        <option value="Portuguese"></option>
-                        <option value="Punjabi"></option>
-                        <option value="Romanian"></option>
-                        <option value="Russian"></option>
-                        <option value="Sanskrit"></option>
-                        <option value="Scottish Gaelic"></option>
-                        <option value="Serbian"></option>
-                        <option value="Sindhi"></option>
-                        <option value="Sinhala"></option>
-                        <option value="Slovak"></option>
-                        <option value="Slovenian"></option>
-                        <option value="Somali"></option>
-                        <option value="Spanish"></option>
-                        <option value="Sundanese"></option>
-                        <option value="Swahili"></option>
-                        <option value="Swedish"></option>
-                        <option value="Tamil"></option>
-                        <option value="Tamil Romanized"></option>
-                        <option value="Telugu"></option>
-                        <option value="Telugu Romanized"></option>
-                        <option value="Thai"></option>
-                        <option value="Turkish"></option>
-                        <option value="Ukrainian"></option>
-                        <option value="Urdu"></option>
-                        <option value="Urdu Romanized"></option>
-                        <option value="Uyghur"></option>
-                        <option value="Uzbek"></option>
-                        <option value="Vietnamese"></option>
-                        <option value="Welsh"></option>
-                        <option value="Western Frisian"></option>
-                        <option value="Xhosa"></option>
-                        <option value="Yiddish"></option>
-                    </datalist>
-                    <button id = "askQuestionButton">Ask Question</button>
-                    <button id = "clearQuestionButton">Clear</button>
+                <div id="indexProgressPanel" class="index-progress hidden" aria-live="polite">
+                    <div class="index-progress-header">
+                        <span id="indexProgressText">Indexing...</span>
+                        <span id="indexProgressCount"></span>
+                    </div>
+                    <progress id="indexProgressBar" max="100" value="0"></progress>
                 </div>
-                
-                <div class = "example-questions">
-                    <p>Example Questions:</p>
-                    <button class = "example-question">
-                        What topics are discussed in these videos?
-                    </button>
-                    
-                    <button class = "example-question">
-                        What is the most recent video about?
-                    </button>
-                    
-                    <button class = "example-question">
-                        What topics do these videos have in common?
-                    </button>
-
-                    <button class = "example-question">
-                        ¿Qué temas se discuten en estos videos?
-                    </button>
-                </div>
-                
-                <div
-                    id="transcriptStatus"
-                    class="transcript-status hidden"
-                    role="status"
-                    aria-live="polite"
-                ></div>
-                
-                <div class = "answer-card">
-                    <h3>Answer</h3>
-                    <p id = "answerText">The answer will appear here.</p>
-                </div>
-                
-                <div class="answer-card">
-                    <h3>Source Videos</h3>
-                    <ul id="answerSources">
-                        <li>Sources will appear here after you ask a question.</li>
-                    </ul>
-                </div>
+                <div id="transcriptStatus" class="transcript-status hidden" role="status" aria-live="polite"></div>
             </div>
         </section>
 
@@ -347,6 +193,9 @@
                             <tr>
                                 <th>Thumbnail</th>
                                 <th>Video</th>
+                                <th>Type</th>
+                                <th>Transcript</th>
+                                <th>RAG</th>
                                 <th>Published</th>
                                 <th>Length</th>
                                 <th>Views</th>
@@ -358,6 +207,9 @@
                             <tr class="filter-row">
                                 <th></th>
                                 <th><input type="text" placeholder="Filter title"></th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
                                 <th><input type="text" placeholder="Filter date"></th>
                                 <th><input type="text" placeholder="Filter length"></th>
                                 <th><input type="text" placeholder="Filter views"></th>
@@ -371,6 +223,34 @@
                 </div>
             </div>
         </section>
+
+        <!-- In-memory conversational RAG popup. Chat history is not persisted. -->
+        <div id="chatModal" class="chat-modal hidden" role="dialog" aria-modal="true" aria-labelledby="chatModalTitle">
+            <div class="chat-dialog">
+                <div class="chat-header">
+                    <div>
+                        <h2 id="chatModalTitle">Channel RAG Chatbot</h2>
+                        <p class="note">Conversation context is kept only in Python memory and is cleared when the backend restarts.</p>
+                    </div>
+                    <button id="closeChatButton" type="button" class="chat-close" aria-label="Close chatbot">×</button>
+                </div>
+                <div id="chatMessages" class="chat-messages" aria-live="polite">
+                    <div class="chat-bubble assistant">Ask a question about the indexed channel content.</div>
+                </div>
+                <div class="question-row chat-input-row">
+                    <input id="questionInput" type="text" placeholder="Ask about the channel, a specific video, or compare videos...">
+                    <button id="askQuestionButton" type="button">Ask</button>
+                    <button id="newChatButton" type="button">New Chat</button>
+                </div>
+                <div class="example-questions">
+                    <button class="example-question">What is the most recent video about?</button>
+                    <button class="example-question">What is the longest video about?</button>
+                    <button class="example-question">What is the most liked video?</button>
+                    <button class="example-question">Compare two videos by typing both titles in quotes.</button>
+                    <button class="example-question">¿Qué temas se discuten en estos videos?</button>
+                </div>
+            </div>
+        </div>
 
         <!-- Back to Top button -->
         <button id = "backToTopButton" type = "button" aria-label = "Back to top" title = "Back to top">

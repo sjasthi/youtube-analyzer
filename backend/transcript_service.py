@@ -231,8 +231,15 @@ def _delay_before_next_youtube_request() -> float:
 def get_video_transcripts_with_status(
     videos: list[dict[str, Any]],
     channel_id: str,
+    should_stop=None,
+    on_transcript=None,
+    on_progress=None,
 ) -> dict[str, Any]:
-    """Retrieve/cache a transcript batch and return progress/block information."""
+    """Retrieve/cache a transcript batch and return progress/block information.
+
+    Optional callbacks are used by the web indexing job so status can update
+    while a long batch is running. Existing callers can ignore them.
+    """
     transcripts: list[dict[str, Any]] = []
 
     sqlite_cache_count = 0
@@ -241,13 +248,27 @@ def get_video_transcripts_with_status(
     youtube_request_count = 0
 
     blocked = False
+    cancelled = False
     block_type = None
     blocked_video_id = None
     blocked_error = None
     has_made_youtube_request = False
 
-    for video in videos:
+    for position, video in enumerate(videos, start=1):
+        if should_stop and should_stop():
+            cancelled = True
+            break
+
         video_id = str(video["video_id"])
+
+        if on_progress:
+            on_progress({
+                "event": "starting",
+                "position": position,
+                "total": len(videos),
+                "video_id": video_id,
+                "title": video.get("title"),
+            })
 
         # Cache lookup happens before any delay. Cached transcripts should stay
         # fast and should not count as YouTube requests.
@@ -255,7 +276,12 @@ def get_video_transcripts_with_status(
         if saved is not None:
             print(f"Using cached transcript from SQLite: {video_id}")
             sqlite_cache_count += 1
-            transcripts.append(_saved_transcript_record(saved, video))
+            record = _saved_transcript_record(saved, video)
+            transcripts.append(record)
+            if on_transcript:
+                on_transcript(record, {"source": "sqlite_cache", "position": position, "total": len(videos)})
+            if on_progress:
+                on_progress({"event": "transcript_ready", "source": "sqlite_cache", "position": position, "total": len(videos), "video_id": video_id, "title": video.get("title")})
             continue
 
         if has_made_youtube_request:
@@ -268,6 +294,10 @@ def get_video_transcripts_with_status(
             record = _fetch_and_save_youtube_transcript(video, channel_id)
             youtube_fetch_count += 1
             transcripts.append(record)
+            if on_transcript:
+                on_transcript(record, {"source": "youtube_transcript_api", "position": position, "total": len(videos)})
+            if on_progress:
+                on_progress({"event": "transcript_ready", "source": "youtube_transcript_api", "position": position, "total": len(videos), "video_id": video_id, "title": video.get("title")})
 
         except (RequestBlocked, IpBlocked) as error:
             blocked = True
@@ -279,11 +309,15 @@ def get_video_transcripts_with_status(
                 "Transcript retrieval stopped because YouTube blocked the "
                 f"request ({block_type}) for {video_id}."
             )
+            if on_progress:
+                on_progress({"event": "blocked", "position": position, "total": len(videos), "video_id": video_id, "title": video.get("title"), "block_type": block_type})
             break
 
         except Exception as error:
             failed_video_count += 1
             print(f"Transcript error for {video_id}: {error}")
+            if on_progress:
+                on_progress({"event": "failed", "position": position, "total": len(videos), "video_id": video_id, "title": video.get("title"), "error": str(error)})
             continue
 
     successful_count = len(transcripts)
@@ -302,6 +336,7 @@ def get_video_transcripts_with_status(
         "failed_video_count": failed_video_count,
         "remaining_video_count": remaining_video_count,
         "blocked": blocked,
+        "cancelled": cancelled,
         "block_type": block_type,
         "blocked_video_id": blocked_video_id,
         "blocked_error": blocked_error,

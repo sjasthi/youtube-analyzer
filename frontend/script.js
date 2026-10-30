@@ -47,12 +47,18 @@ const questionSection = document.getElementById("questionSection");
 const questionInput = document.getElementById("questionInput");
 const askQuestionButton = document.getElementById("askQuestionButton");
 const indexRagButton = document.getElementById("indexRagButton");
-const answerText = document.getElementById("answerText");
-const answerSources = document.getElementById("answerSources");
 const transcriptStatus = document.getElementById("transcriptStatus");
-const clearQuestionButton = document.getElementById("clearQuestionButton");
-const answerLanguage = document.getElementById("answerLanguage");
+const newChatButton = document.getElementById("newChatButton");
 const exampleQuestions = document.querySelectorAll(".example-question");
+const openChatButton = document.getElementById("openChatButton");
+const closeChatButton = document.getElementById("closeChatButton");
+const chatModal = document.getElementById("chatModal");
+const chatMessages = document.getElementById("chatMessages");
+const cancelIndexButton = document.getElementById("cancelIndexButton");
+const indexProgressPanel = document.getElementById("indexProgressPanel");
+const indexProgressText = document.getElementById("indexProgressText");
+const indexProgressCount = document.getElementById("indexProgressCount");
+const indexProgressBar = document.getElementById("indexProgressBar");
 
 // Cache-only transcript viewer elements.
 const transcriptViewerSection = document.getElementById("transcriptViewerSection");
@@ -60,9 +66,6 @@ const transcriptVideoSelect = document.getElementById("transcriptVideoSelect");
 const loadTranscriptButton = document.getElementById("loadTranscriptButton");
 const transcriptViewerMeta = document.getElementById("transcriptViewerMeta");
 const transcriptViewerText = document.getElementById("transcriptViewerText");
-
-// Default messages for the question and answer section
-const defaultAnswer = "The answer will appear here.";
 
 // Store the current Chart.js object so it can be replaced on the next search.
 let uploadTrendChart = null;
@@ -72,6 +75,12 @@ let videoDataTable = null;
 
 // Resolved UC channel ID used by the RAG question endpoint.
 let activeChannelId = null;
+let activeIndexJobId = null;
+let indexJobPoller = null;
+let videoStatusPoller = null;
+let currentVideos = [];
+let chatSessionId = sessionStorage.getItem("ragChatSessionId") || (crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}-${Math.random()}`);
+sessionStorage.setItem("ragChatSessionId", chatSessionId);
 
 // Returns true when the saved/active page theme is dark.
 function isDarkMode() {
@@ -208,6 +217,7 @@ function displayAnalytics(analytics) {
     if (analytics.most_viewed_video) {
         const video = analytics.most_viewed_video;
         const videoLink = document.createElement("a");
+        const thumbnail = document.createElement("img");
 
         videoLink.href = `https://www.youtube.com/watch?v=${encodeURIComponent(video.video_id)}`;
         videoLink.target = "_blank";
@@ -215,13 +225,18 @@ function displayAnalytics(analytics) {
         videoLink.className = "video-title";
         videoLink.textContent = video.title;
 
-        mostViewedTitle.replaceChildren(videoLink);
+        thumbnail.src = `https://img.youtube.com/vi/${encodeURIComponent(video.video_id)}/mqdefault.jpg`;
+        thumbnail.alt = `Thumbnail for ${video.title}`;
+        thumbnail.className = "analytics-video-thumbnail";
+
+        mostViewedTitle.replaceChildren(thumbnail, videoLink);
         mostViewedValue.textContent = `${formatNumber(video.view_count)} views`;
     }
 
     if (analytics.most_liked_video) {
         const video = analytics.most_liked_video;
         const videoLink = document.createElement("a");
+        const thumbnail = document.createElement("img");
 
         videoLink.href = `https://www.youtube.com/watch?v=${encodeURIComponent(video.video_id)}`;
         videoLink.target = "_blank";
@@ -229,7 +244,11 @@ function displayAnalytics(analytics) {
         videoLink.className = "video-title";
         videoLink.textContent = video.title;
 
-        mostLikedTitle.replaceChildren(videoLink);
+        thumbnail.src = `https://img.youtube.com/vi/${encodeURIComponent(video.video_id)}/mqdefault.jpg`;
+        thumbnail.alt = `Thumbnail for ${video.title}`;
+        thumbnail.className = "analytics-video-thumbnail";
+
+        mostLikedTitle.replaceChildren(thumbnail, videoLink);
         mostLikedValue.textContent = `${formatNumber(video.like_count)} likes`;
     }
 
@@ -296,80 +315,91 @@ function displayUploadChart(monthData) {
 }
 
 
+function videoTypeLabel(video) {
+    const seconds = Number(video.duration_seconds || 0);
+    return seconds > 0 && seconds <= 180 ? "Short-form candidate" : "Regular / unknown";
+}
+
+function makeStatusBadge(kind, label, className) {
+    const badge = document.createElement("span");
+    badge.className = `status-badge ${className}`;
+    badge.dataset.kind = kind;
+    badge.textContent = label;
+    return badge;
+}
+
 function displayVideos(videos) {
-    // If DataTables was already created from a previous search,
-    // destroy it before changing the table rows.
+    currentVideos = videos || [];
     if (videoDataTable) {
         videoDataTable.destroy();
         videoDataTable = null;
     }
-
-    // Clear rows from the previous channel analysis.
     videoTableBody.innerHTML = "";
 
-    if (videos.length === 0) {
+    if (currentVideos.length === 0) {
         const row = document.createElement("tr");
         const cell = document.createElement("td");
-
-        // There are 8 table columns: thumbnail, video details, statistics,
-        // and a hidden YouTube URL used by the export buttons.
-        cell.colSpan = 8;
+        cell.colSpan = 11;
         cell.textContent = "No public videos were returned.";
         row.appendChild(cell);
         videoTableBody.appendChild(row);
     } else {
-        // Create one table row for each returned video.
-        videos.forEach(video => {
+        currentVideos.forEach(video => {
             const row = document.createElement("tr");
-
-            const titleCell = document.createElement("td");
-            titleCell.className = "video-cell";
-
-            // Build the normal YouTube watch URL from the video ID.
+            row.dataset.videoId = video.video_id;
             const videoUrl = `https://www.youtube.com/watch?v=${video.video_id}`;
 
-            // Show the YouTube thumbnail as a clickable image. The thumbnail
-            // is loaded directly from the URL already returned by the backend.
             const thumbnailCell = document.createElement("td");
             thumbnailCell.className = "video-thumbnail-cell";
-
             if (video.thumbnail_url) {
                 const thumbnailLink = document.createElement("a");
                 thumbnailLink.href = videoUrl;
                 thumbnailLink.target = "_blank";
                 thumbnailLink.rel = "noopener noreferrer";
-                thumbnailLink.setAttribute("aria-label", `Open ${video.title || "video"} on YouTube`);
-
                 const thumbnail = document.createElement("img");
                 thumbnail.className = "video-thumbnail";
                 thumbnail.src = video.thumbnail_url;
                 thumbnail.alt = `${video.title || "Video"} thumbnail`;
                 thumbnail.loading = "lazy";
-
                 thumbnailLink.appendChild(thumbnail);
                 thumbnailCell.appendChild(thumbnailLink);
             } else {
-                const unavailable = document.createElement("span");
-                unavailable.className = "thumbnail-unavailable";
-                unavailable.textContent = "No image";
-                thumbnailCell.appendChild(unavailable);
+                thumbnailCell.textContent = "No image";
             }
 
-            // Make the video title clickable. It opens YouTube in a new tab.
+            const titleCell = document.createElement("td");
+            titleCell.className = "video-cell";
             const title = document.createElement("a");
             title.className = "video-title";
             title.textContent = video.title || "Untitled";
             title.href = videoUrl;
             title.target = "_blank";
             title.rel = "noopener noreferrer";
-
-            // Keep the video ID visible below the title.
             const id = document.createElement("span");
             id.className = "video-id";
             id.textContent = video.video_id;
+            titleCell.append(title, id);
 
-            titleCell.appendChild(title);
-            titleCell.appendChild(id);
+            const typeCell = document.createElement("td");
+            typeCell.className = "video-type-cell compact-status-cell";
+            const typeLabel = videoTypeLabel(video);
+            const typeBadge = makeStatusBadge(
+                "type",
+                typeLabel === "Short-form candidate" ? "Short-form" : "Regular",
+                typeLabel === "Short-form candidate" ? "status-info" : "status-neutral"
+            );
+            typeCell.appendChild(typeBadge);
+            typeCell.title = typeLabel === "Short-form candidate"
+                ? "Duration is 3 minutes or less. The YouTube Data API does not expose the aspect-ratio signal needed to prove this is a Short."
+                : "Not classified as a short-form candidate from duration alone.";
+
+            const transcriptCell = document.createElement("td");
+            transcriptCell.className = "transcript-status-cell compact-status-cell";
+            transcriptCell.appendChild(makeStatusBadge("transcript", "Checking…", "status-pending"));
+
+            const ragCell = document.createElement("td");
+            ragCell.className = "rag-status-cell compact-status-cell";
+            ragCell.appendChild(makeStatusBadge("rag", "Checking…", "status-pending"));
 
             const publishedCell = document.createElement("td");
             publishedCell.textContent = formatDate(video.published_at);
@@ -382,154 +412,127 @@ function displayVideos(videos) {
             const viewsCell = document.createElement("td");
             viewsCell.textContent = formatNumber(video.view_count);
             viewsCell.dataset.order = video.view_count;
-
             const likesCell = document.createElement("td");
             likesCell.textContent = formatNumber(video.like_count);
             likesCell.dataset.order = video.like_count;
-
             const commentsCell = document.createElement("td");
             commentsCell.textContent = formatNumber(video.comment_count);
             commentsCell.dataset.order = video.comment_count;
-
-            // This eighth column is hidden on the webpage but included
-            // in exported CSV, Excel, PDF, Copy, and Print output.
             const urlCell = document.createElement("td");
             urlCell.textContent = videoUrl;
 
-            row.append(
-                thumbnailCell,
-                titleCell,
-                publishedCell,
-                durationCell,
-                viewsCell,
-                likesCell,
-                commentsCell,
-                urlCell
-            );
-
+            row.append(thumbnailCell, titleCell, typeCell, transcriptCell, ragCell, publishedCell, durationCell, viewsCell, likesCell, commentsCell, urlCell);
             videoTableBody.appendChild(row);
         });
     }
 
-    // Export only rows that match the current DataTables search/filter.
-    // page: "all" means export every matching row, not just the current page.
     const exportOptions = {
-        // Skip column 0 because image thumbnails do not belong in text exports.
-        columns: [1, 2, 3, 4, 5, 6, 7],
-        modifier: {
-            search: "applied",
-            order: "applied",
-            page: "all"
-        },
+        columns: [1, 5, 6, 7, 8, 9, 10],
+        modifier: { search: "applied", order: "applied", page: "all" },
         format: {
             body: function(data, row, column, node) {
-                // Column 1 is the visible Video cell (column 0 is the thumbnail).
-                // Export only the readable title because the full URL is exported
-                // in its own hidden column.
                 if (column === 1) {
                     const link = node.querySelector("a.video-title");
                     return link ? link.textContent.trim() : node.textContent.trim();
                 }
-
+                if (column === 4) {
+                    return node.querySelector(".status-badge")?.textContent.trim() || node.textContent.trim();
+                }
                 return node.textContent.trim();
             }
         }
     };
 
-    // Create the DataTable with filtering, sorting, pagination, and exports.
     videoDataTable = $("#videoTable").DataTable({
         pageLength: 10,
         lengthMenu: [10, 25, 50],
-
-        // Published defaults to newest first. Thumbnail is column 0, so
-        // the Published column is index 2.
-        order: [[2, "desc"]],
-
+        order: [[5, "desc"]],
         columnDefs: [
-            {
-                // Thumbnail is visual only; it should not affect search or sorting.
-                targets: 0,
-                orderable: false,
-                searchable: false
-            },
-            {
-                // Column 2 = Published.
-                targets: 2,
-                // Only switch between newest and oldest.
-                orderSequence: ["desc", "asc"]
-            },
-            {
-                // Column 7 contains the full YouTube URL.
-                // Keep it out of the visible table, but available for export.
-                targets: 7,
-                visible: false,
-                searchable: false
-            }
+            { targets: 0, orderable: false, searchable: false },
+            { targets: [3, 4], orderable: false },
+            { targets: 5, orderSequence: ["desc", "asc"] },
+            { targets: 10, visible: false, searchable: false }
         ],
-
-        // Keep the normal page-length control and add export buttons.
         layout: {
             topStart: ["pageLength", "buttons"],
             topEnd: "search",
             bottomStart: "info",
             bottomEnd: "paging"
         },
-
         buttons: [
-            {
-                extend: "copyHtml5",
-                text: "Copy",
-                exportOptions: exportOptions
-            },
-            {
-                extend: "csvHtml5",
-                text: "CSV",
-                filename: "youtube-channel-videos",
-                exportOptions: exportOptions
-            },
-            {
-                extend: "excelHtml5",
-                text: "Excel",
-                filename: "youtube-channel-videos",
-                title: "YouTube Channel Videos",
-                exportOptions: exportOptions
-            },
-            {
-                extend: "pdfHtml5",
-                text: "PDF",
-                filename: "youtube-channel-videos",
-                title: "YouTube Channel Videos",
-                orientation: "landscape",
-                pageSize: "LETTER",
-                exportOptions: exportOptions
-            },
-            {
-                extend: "print",
-                text: "Print",
-                title: "YouTube Channel Videos",
-                exportOptions: exportOptions
-            }
+            { extend: "copyHtml5", text: "Copy", exportOptions },
+            { extend: "csvHtml5", text: "CSV", filename: "youtube-channel-videos", exportOptions },
+            { extend: "excelHtml5", text: "Excel", filename: "youtube-channel-videos", title: "YouTube Channel Videos", exportOptions },
+            { extend: "pdfHtml5", text: "PDF", filename: "youtube-channel-videos", title: "YouTube Channel Videos", orientation: "landscape", pageSize: "LETTER", exportOptions },
+            { extend: "print", text: "Print", title: "YouTube Channel Videos", exportOptions }
         ],
-
-        // Prevent the second header row from becoming another sortable heading row.
         orderCellsTop: true
     });
 
-    // Connect the individual column filters.
-    // Thumbnail and hidden URL columns intentionally have no filter input.
-    $("#videoTable thead tr.filter-row th").each(function (columnIndex) {
-        $("input", this)
+    $("#videoTable thead tr.filter-row th").each(function(columnIndex) {
+        $("input, select", this)
             .off("keyup change")
             .on("keyup change", function() {
-                videoDataTable
-                    .column(columnIndex)
-                    .search(this.value)
-                    .draw();
+                const column = videoDataTable.column(columnIndex);
+                if (this.tagName === "SELECT" && this.value) {
+                    const escaped = $.fn.dataTable.util.escapeRegex(this.value);
+                    column.search(`^${escaped}$`, true, false).draw();
+                } else {
+                    column.search(this.value || "").draw();
+                }
             });
     });
-
-    // Show the video section.
     videosSection.classList.remove("hidden");
+}
+
+function updateVideoStatusRows(statuses) {
+    const byId = new Map((statuses || []).map(item => [String(item.video_id), item]));
+    const nodes = videoDataTable ? videoDataTable.rows().nodes().toArray() : Array.from(videoTableBody.querySelectorAll("tr"));
+    nodes.forEach(row => {
+        const status = byId.get(String(row.dataset.videoId || ""));
+        if (!status) return;
+        const transcriptCell = row.querySelector(".transcript-status-cell");
+        const ragCell = row.querySelector(".rag-status-cell");
+        if (transcriptCell) {
+            const transcriptLabel = status.transcript_cached ? "Cached" : (status.processing_phase === "transcripts" ? "Retrieving…" : "Not cached");
+            transcriptCell.dataset.search = transcriptLabel;
+            transcriptCell.replaceChildren(makeStatusBadge("transcript", transcriptLabel, status.transcript_cached ? "status-success" : (status.processing_phase ? "status-processing" : "status-missing")));
+        }
+        if (ragCell) {
+            ragCell.innerHTML = "";
+            const label = status.rag_indexed ? "Indexed" : (status.processing_phase === "embedding" ? "Embedding…" : "Not indexed");
+            ragCell.dataset.search = label;
+            ragCell.appendChild(makeStatusBadge("rag", label, status.rag_indexed ? "status-success" : (status.processing_phase ? "status-processing" : "status-missing")));
+            if (!status.rag_indexed && !status.processing_phase) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "index-video-button compact-button";
+                button.dataset.videoId = row.dataset.videoId;
+                button.textContent = "Index";
+                ragCell.appendChild(button);
+            }
+        }
+        if (videoDataTable) {
+            try { videoDataTable.row(row).invalidate("dom"); } catch (error) { /* visible status still updated */ }
+        }
+    });
+}
+
+async function refreshVideoStatuses() {
+    if (!activeChannelId) return;
+    try {
+        const response = await fetch(`/api/channel/${encodeURIComponent(activeChannelId)}/video-statuses`);
+        const data = await response.json();
+        if (response.ok) updateVideoStatusRows(data.videos);
+    } catch (error) {
+        console.warn("Unable to refresh video pipeline statuses:", error);
+    }
+}
+
+function startVideoStatusPolling() {
+    if (videoStatusPoller) clearInterval(videoStatusPoller);
+    refreshVideoStatuses();
+    videoStatusPoller = setInterval(refreshVideoStatuses, 2000);
 }
 
 
@@ -541,9 +544,13 @@ async function analyzeChannel() {
     // Also clear the previous channel's question so it does not carry over
     // when a different channel is analyzed.
     activeChannelId = null;
+    if (videoStatusPoller) { clearInterval(videoStatusPoller); videoStatusPoller = null; }
+    if (indexJobPoller) { clearInterval(indexJobPoller); indexJobPoller = null; }
+    activeIndexJobId = null;
+    chatSessionId = crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}-${Math.random()}`;
+    sessionStorage.setItem("ragChatSessionId", chatSessionId);
+    chatMessages.innerHTML = '<div class="chat-bubble assistant">Ask a question about the indexed channel content.</div>';
     questionInput.value = "";
-    answerText.textContent = defaultAnswer;
-    answerSources.innerHTML = "<li>Sources will appear here after you ask a question.</li>";
     askQuestionButton.disabled = true;
     errorMessage.classList.add("hidden");
     channelSection.classList.add("hidden");
@@ -607,6 +614,7 @@ async function analyzeChannel() {
         transcriptViewerSection.classList.remove("hidden");
         await refreshRagCoverage();
         await refreshTranscriptViewer();
+        startVideoStatusPolling();
 
     } catch (error) {
         errorMessage.textContent = `Error: ${error.message}`;
@@ -653,51 +661,90 @@ async function refreshRagCoverage() {
 
 
 // Explicitly retrieve/index missing transcript content for this channel.
-async function indexRagContent() {
+async function startIndexJob(videoId = null) {
     if (!activeChannelId) {
-        displayTranscriptStatus({
-            severity: "warning",
-            message: "Analyze a channel before indexing RAG content.",
-        });
+        displayTranscriptStatus({ severity: "warning", message: "Analyze a channel before indexing RAG content." });
+        return;
+    }
+    if (activeIndexJobId) {
+        displayTranscriptStatus({ severity: "info", message: "An indexing job is already running." });
         return;
     }
 
-    const originalText = indexRagButton.textContent;
     indexRagButton.disabled = true;
     indexRagButton.textContent = "Indexing...";
-
-    displayTranscriptStatus({
-        severity: "info",
-        message: "Indexing missing transcript content. Cached SQLite/Chroma data will be reused first.",
-    });
+    cancelIndexButton.classList.remove("hidden");
+    indexProgressPanel.classList.remove("hidden");
+    indexProgressBar.value = 0;
+    indexProgressText.textContent = videoId ? "Starting single-video indexing..." : "Starting channel indexing...";
+    indexProgressCount.textContent = "";
 
     try {
-        const response = await fetch("/api/rag/index", {
+        const response = await fetch("/api/rag/index/start", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                channel_id: activeChannelId,
-            }),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ channel_id: activeChannelId, video_id: videoId })
         });
-
         const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.detail || "Unable to index RAG content.");
-        }
-
-        displayTranscriptStatus(data.transcript_status);
-        await refreshTranscriptViewer();
+        if (!response.ok) throw new Error(data.detail || "Unable to start indexing.");
+        activeIndexJobId = data.job_id;
+        pollIndexJob();
+        indexJobPoller = setInterval(pollIndexJob, 1000);
     } catch (error) {
-        displayTranscriptStatus({
-            severity: "warning",
-            message: `RAG indexing error: ${error.message}`,
-        });
-    } finally {
         indexRagButton.disabled = false;
-        indexRagButton.textContent = originalText;
+        indexRagButton.textContent = "Index RAG Content";
+        cancelIndexButton.classList.add("hidden");
+        displayTranscriptStatus({ severity: "warning", message: `RAG indexing error: ${error.message}` });
+    }
+}
+
+async function indexRagContent() {
+    return startIndexJob(null);
+}
+
+async function pollIndexJob() {
+    if (!activeIndexJobId) return;
+    try {
+        const response = await fetch(`/api/rag/index/job/${encodeURIComponent(activeIndexJobId)}`);
+        const job = await response.json();
+        if (!response.ok) throw new Error(job.detail || "Unable to read indexing progress.");
+
+        const total = Number(job.total_video_count || 0);
+        const indexed = Number(job.indexed_video_count || job.newly_indexed_count || 0);
+        const processed = Number(job.processed_count || 0);
+        const already = Number(job.already_indexed_count || 0);
+        const completed = Math.min(total, already + processed);
+        const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+        indexProgressBar.value = percent;
+        indexProgressText.textContent = job.message || "Indexing...";
+        indexProgressCount.textContent = total > 0 ? `${completed}/${total} (${percent}%)` : "";
+        displayTranscriptStatus({ severity: job.severity || "info", message: job.message || "Indexing..." });
+        await refreshVideoStatuses();
+
+        if (["completed", "cancelled", "blocked", "failed"].includes(job.state)) {
+            clearInterval(indexJobPoller);
+            indexJobPoller = null;
+            activeIndexJobId = null;
+            indexRagButton.disabled = false;
+            indexRagButton.textContent = job.state === "completed" ? "Index RAG Content" : "Resume Indexing";
+            cancelIndexButton.classList.add("hidden");
+            indexProgressBar.value = job.state === "completed" ? 100 : percent;
+            await refreshTranscriptViewer();
+            await refreshRagCoverage();
+            await refreshVideoStatuses();
+        }
+    } catch (error) {
+        console.warn("Unable to poll indexing job:", error);
+    }
+}
+
+async function cancelIndexing() {
+    if (!activeIndexJobId) return;
+    cancelIndexButton.disabled = true;
+    try {
+        await fetch(`/api/rag/index/job/${encodeURIComponent(activeIndexJobId)}/cancel`, { method: "POST" });
+    } finally {
+        cancelIndexButton.disabled = false;
     }
 }
 
@@ -722,99 +769,75 @@ function displayTranscriptStatus(status) {
 
 
 // Handles the Ask Question button
+function appendChatBubble(role, text, sources = []) {
+    const bubble = document.createElement("div");
+    bubble.className = `chat-bubble ${role}`;
+    const content = document.createElement("div");
+    content.textContent = text;
+    bubble.appendChild(content);
+    if (sources && sources.length) {
+        const list = document.createElement("ul");
+        list.className = "chat-source-list";
+        sources.forEach(source => {
+            const item = document.createElement("li");
+            const link = document.createElement("a");
+            link.href = source.video_url;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.textContent = source.title || source.video_id;
+            item.appendChild(link);
+            if (source.start_time !== null && source.start_time !== undefined) {
+                item.append(` (${formatDuration(source.start_time)})`);
+            }
+            list.appendChild(item);
+        });
+        bubble.appendChild(list);
+    }
+    chatMessages.appendChild(bubble);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
 async function askQuestion() {
     const question = questionInput.value.trim();
-
-    // Checks for an empty question
-    if (question === "") {
-        answerText.textContent = "Please enter a question.";
-        return;
-    }
-
-    // The question must belong to a channel that was successfully analyzed.
+    if (question === "") return;
     if (!activeChannelId) {
-        answerText.textContent = "Analyze a channel before asking a question.";
+        appendChatBubble("assistant", "Analyze a channel before asking a question.");
         return;
     }
-    
-    answerText.textContent = "Searching indexed transcript context and generating an answer...";
-    transcriptStatus.textContent = "Searching existing Chroma transcript content...";
-    transcriptStatus.className = "transcript-status";
-    
+
+    appendChatBubble("user", question);
+    questionInput.value = "";
+    askQuestionButton.disabled = true;
+    const pending = document.createElement("div");
+    pending.className = "chat-bubble assistant pending-answer";
+    pending.textContent = "Searching indexed transcript context...";
+    chatMessages.appendChild(pending);
+
     try {
         const response = await fetch("/api/question", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 channel_id: activeChannelId,
-                question: question,
-                answer_language: answerLanguage.value.trim() || "auto",
-            }),
+                question,
+                session_id: chatSessionId
+            })
         });
-        
         const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.detail || "Unable to get an answer.");
+        if (!response.ok) throw new Error(data.detail || "Unable to get an answer.");
+        if (data.session_id) {
+            chatSessionId = data.session_id;
+            sessionStorage.setItem("ragChatSessionId", chatSessionId);
         }
-
-        answerText.textContent = data.answer;
+        pending.remove();
+        appendChatBubble("assistant", data.answer, data.sources || []);
         displayTranscriptStatus(data.transcript_status);
-        
-        // Displays the source videos used to answer the question
-        answerSources.innerHTML = "";
-        
-        // Creates links to the source videos, or displays a message if none are found
-        if (data.sources && data.sources.length > 0) {
-            data.sources.forEach((source) => {
-                const listItem = document.createElement("li");
-                const link = document.createElement("a");
-
-                link.href = source.video_url;
-                link.textContent = source.title;
-                link.target = "_blank";
-                link.rel = "noopener noreferrer";
-                link.className = "video-title";
-
-                listItem.appendChild(link);
-
-                const details = [];
-                if (source.start_time !== null && source.start_time !== undefined) {
-                    details.push(`timestamp ${formatDuration(source.start_time)}`);
-                }
-                if (source.language) {
-                    details.push(`language ${source.language}`);
-                }
-                if (source.published_at) {
-                    details.push(`published ${formatDate(source.published_at)}`);
-                }
-                if (source.duration_seconds !== null && source.duration_seconds !== undefined) {
-                    details.push(`duration ${formatDuration(source.duration_seconds)}`);
-                }
-
-                if (details.length > 0) {
-                    const metadata = document.createElement("span");
-                    metadata.className = "source-meta";
-                    metadata.textContent = ` — ${details.join(" • ")}`;
-                    listItem.appendChild(metadata);
-                }
-
-                answerSources.appendChild(listItem);
-            });
-        } else {
-            answerSources.innerHTML = "<li>No source videos were found.</li>";
-        }
-
     } catch (error) {
-        answerText.textContent = `Error: ${error.message}`;
-        answerSources.innerHTML = "<li>Sources are unavailable.</li>";
-        transcriptStatus.textContent = "";
-        transcriptStatus.className = "transcript-status hidden";
+        pending.remove();
+        appendChatBubble("assistant", `Error: ${error.message}`);
     }
 }
+
 
 // Load the list of transcripts that already exist in SQLite. This endpoint is
 // cache-only and will never trigger youtube-transcript-api.
@@ -917,6 +940,28 @@ loadTranscriptButton.addEventListener("click", viewSelectedTranscript);
 
 // Index transcript content only when the user explicitly requests it.
 indexRagButton.addEventListener("click", indexRagContent);
+cancelIndexButton.addEventListener("click", cancelIndexing);
+
+videoTableBody.addEventListener("click", event => {
+    const button = event.target.closest(".index-video-button");
+    if (button) startIndexJob(button.dataset.videoId);
+});
+
+openChatButton.addEventListener("click", () => {
+    chatModal.classList.remove("hidden");
+    document.body.classList.add("modal-open");
+    questionInput.focus();
+});
+closeChatButton.addEventListener("click", () => {
+    chatModal.classList.add("hidden");
+    document.body.classList.remove("modal-open");
+});
+chatModal.addEventListener("click", event => {
+    if (event.target === chatModal) closeChatButton.click();
+});
+document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && !chatModal.classList.contains("hidden")) closeChatButton.click();
+});
 
 // Asks the question when the button is clicked. This is Chroma-only and does
 // not retrieve missing transcripts.
@@ -927,13 +972,15 @@ questionInput.addEventListener("keydown", event => {
     if (event.key === "Enter") askQuestion();
 });
 
-// Clears the question and answer
-clearQuestionButton.addEventListener("click", () => {
+// Starts a fresh non-persistent conversation in both the browser and Python memory.
+newChatButton.addEventListener("click", async () => {
+    const oldSessionId = chatSessionId;
+    chatSessionId = crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}-${Math.random()}`;
+    sessionStorage.setItem("ragChatSessionId", chatSessionId);
     questionInput.value = "";
-    answerText.textContent = defaultAnswer;
-    transcriptStatus.textContent = "";
-    transcriptStatus.className = "transcript-status hidden";
+    chatMessages.innerHTML = '<div class="chat-bubble assistant">New chat started. Ask a question about the indexed channel content.</div>';
     askQuestionButton.disabled = true;
+    try { await fetch(`/api/chat/session/${encodeURIComponent(oldSessionId)}`, { method: "DELETE" }); } catch (error) { console.warn(error); }
 });
 
 // Enables the Ask Question button when the user enters text
@@ -959,7 +1006,6 @@ channelInput.addEventListener("keydown", event => {
 
 // Clears the question and answer fields when the page loads
 questionInput.value = "";
-answerText.textContent = defaultAnswer;
 askQuestionButton.disabled = true;
 
 // Switch between light and dark mode when the theme button is clicked.
