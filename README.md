@@ -144,8 +144,7 @@
     - Does not retrieve new YouTube transcripts
 
 <b>FP8</b>
-Refactor frontend chat functionality and enhance video indexing status display
-
+- Refactor frontend chat functionality and enhance video indexing status display
 - Implemented a chat interface for user questions about indexed channel content.
 - Added functionality to start new chat sessions and manage chat state.
 - Enhanced video indexing process with progress indicators and status badges.
