@@ -756,24 +756,3 @@ body.modal-open { overflow: hidden; }
     .chat-messages { min-height: 220px; }
     .chat-bubble { max-width: 95%; }
 }
-
-/* Thumbnail appearance in analytics sections */
-.analytics-video-thumbnail {
-    width: 150px;
-    height: auto;
-    border-radius: 6px;
-}
-
-/* Keep analytics thumbnails and titles side by side */
-#mostViewedTitle,
-#mostLikedTitle {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-}
-
-#mostViewedTitle .analytics-video-thumbnail,
-#mostLikedTitle .analytics-video-thumbnail {
-    flex-shrink: 0;
-    margin-right: 0;
-}
