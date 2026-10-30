@@ -67,6 +67,10 @@ const loadTranscriptButton = document.getElementById("loadTranscriptButton");
 const transcriptViewerMeta = document.getElementById("transcriptViewerMeta");
 const transcriptViewerText = document.getElementById("transcriptViewerText");
 
+// Default messages for the question and answer section
+const defaultAnswer = "The answer will appear here.";
+const defaultSources = "<li>Sources will appear here after you ask a question.</li>";
+
 // Store the current Chart.js object so it can be replaced on the next search.
 let uploadTrendChart = null;
 
@@ -551,6 +555,8 @@ async function analyzeChannel() {
     sessionStorage.setItem("ragChatSessionId", chatSessionId);
     chatMessages.innerHTML = '<div class="chat-bubble assistant">Ask a question about the indexed channel content.</div>';
     questionInput.value = "";
+    answerText.textContent = defaultAnswer;
+    answerSources.innerHTML = "<li>Sources will appear here after you ask a question.</li>";
     askQuestionButton.disabled = true;
     errorMessage.classList.add("hidden");
     channelSection.classList.add("hidden");
@@ -972,13 +978,12 @@ questionInput.addEventListener("keydown", event => {
     if (event.key === "Enter") askQuestion();
 });
 
-// Starts a fresh non-persistent conversation in both the browser and Python memory.
-newChatButton.addEventListener("click", async () => {
-    const oldSessionId = chatSessionId;
-    chatSessionId = crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}-${Math.random()}`;
-    sessionStorage.setItem("ragChatSessionId", chatSessionId);
+// Clears the question and answer
+clearQuestionButton.addEventListener("click", () => {
     questionInput.value = "";
-    chatMessages.innerHTML = '<div class="chat-bubble assistant">New chat started. Ask a question about the indexed channel content.</div>';
+    answerText.textContent = defaultAnswer;
+    transcriptStatus.textContent = "";
+    transcriptStatus.className = "transcript-status hidden";
     askQuestionButton.disabled = true;
     try { await fetch(`/api/chat/session/${encodeURIComponent(oldSessionId)}`, { method: "DELETE" }); } catch (error) { console.warn(error); }
 });
