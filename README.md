@@ -144,20 +144,13 @@
     - Does not retrieve new YouTube transcripts
 
 <b>FP8</b>
-- Make chatbot/RAG smarter
-    - a Popup chat box
-    - Keep queried questions until session is terminated
-    - Removed latest source as it was redundant
-    - Follow-up questions can remember previous video(s)
-    - Changed `clear chat` to `new chat`
-    - RAG now recognize basic questions about analytics
-    - Can decide when to use metadata or transcript content
-    - Able to compare videos
-    - Removed language seletion field
-- Recent videos list
-    - added status of transcript and RAG
-    - Lets users know if video is short or regular
-    - Can index a specific video by clicking on white index button
+Refactor frontend chat functionality and enhance video indexing status display
+
+- Implemented a chat interface for user questions about indexed channel content.
+- Added functionality to start new chat sessions and manage chat state.
+- Enhanced video indexing process with progress indicators and status badges.
+- Updated video display to include type classification and improved source tracking.
+- Refactored RAG evaluation script for clearer output and better handling of multilingual responses.
 
 
 
