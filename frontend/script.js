@@ -380,6 +380,28 @@ function displayVideos(videos) {
             id.textContent = video.video_id;
             titleCell.append(title, id);
 
+            // Copy Video Link button
+            const copyLinkButton = document.createElement("button");
+            copyLinkButton.type = "button";
+            copyLinkButton.className = "copy-video-link-button";
+            copyLinkButton.setAttribute("aria-label", `Copy link for ${video.title || "Untitled"}`);
+            copyLinkButton.textContent = "Copy Link";
+            
+            copyLinkButton.addEventListener("click", async () => {
+                try {
+                    await navigator.clipboard.writeText(videoUrl);
+                    copyLinkButton.textContent = "Copied!";
+                    
+                    setTimeout(() => {
+                        copyLinkButton.textContent = "Copy Link";
+                    }, 2000);
+                } catch (error) {
+                    copyLinkButton.textContent = "Copy failed";
+                }
+            });
+            
+            titleCell.appendChild(copyLinkButton);
+
             const typeCell = document.createElement("td");
             typeCell.className = "video-type-cell compact-status-cell";
             const typeLabel = videoTypeLabel(video);
@@ -776,8 +798,14 @@ function appendChatBubble(role, text, sources = []) {
     content.textContent = text;
     bubble.appendChild(content);
     if (sources && sources.length) {
-        const list = document.createElement("ul");
+        const heading = document.createElement("div");
+        heading.textContent = sources.length === 1 ? "Source:" : "Sources:";
+        heading.className = "chat-source-heading";
+        bubble.appendChild(heading);
+
+        const list = document.createElement("ol");
         list.className = "chat-source-list";
+
         sources.forEach(source => {
             const item = document.createElement("li");
             const link = document.createElement("a");
@@ -787,12 +815,54 @@ function appendChatBubble(role, text, sources = []) {
             link.textContent = source.title || source.video_id;
             item.appendChild(link);
             if (source.start_time !== null && source.start_time !== undefined) {
-                item.append(` (${formatDuration(source.start_time)})`);
+                const timestamp = document.createElement("div");
+                timestamp.textContent = `Timestamp: ${formatDuration(source.start_time)}`;
+                item.appendChild(timestamp);
             }
             list.appendChild(item);
         });
         bubble.appendChild(list);
     }
+
+    // Adds a Copy Answer button to AI responses
+    if (role === "assistant") {
+        const copyButton = document.createElement("button");
+        copyButton.type = "button";
+        copyButton.className = "chat-copy-button";
+        copyButton.textContent = "Copy Answer";
+
+        copyButton.addEventListener("click", async () => {
+            let copyText = text;
+
+            if (sources && sources.length) {
+                const sourceLines = sources.map((source, index) => {
+                    const title = source.title || source.video_id;
+                    let sourceText = `${index + 1}. ${title}\n   ${source.video_url}`;
+
+                    if (source.start_time !== null && source.start_time !== undefined) {
+                        sourceText += `\n   Timestamp: ${formatDuration(source.start_time)}`;
+                    }
+
+                    return sourceText;
+                });
+
+                copyText += "\n\nSources:\n" + sourceLines.join("\n");
+            }
+
+            try {
+                await navigator.clipboard.writeText(copyText);
+                copyButton.textContent = "Copied!";
+                setTimeout(() => {
+                    copyButton.textContent = "Copy Answer";
+                }, 2000);
+            } catch (error) {
+                copyButton.textContent = "Copy failed";
+            }
+        });
+
+        bubble.appendChild(copyButton);
+    }
+
     chatMessages.appendChild(bubble);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }

@@ -150,6 +150,11 @@
 - Enhanced video indexing process with progress indicators and status badges.
 - Updated video display to include type classification and improved source tracking.
 - Refactored RAG evaluation script for clearer output and better handling of multilingual responses.
+- Improved dark mode consistency
+- Added a Copy Answer button to the Channel RAG Chatbot
+- Improved source formatting in the Channel RAG Chatbot with numbered sources, timestamp labels, and consistent link styling
+- Fixed example questions overflowing the chatbot popup at maximum text size
+- Added Copy Link buttons to the Recent Videos section
 
 
 

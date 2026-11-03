@@ -157,7 +157,11 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 .rag-index-row .note {
     margin: 0;
 }
-.example-questions { margin-top: 15px; }
+.example-questions {
+    margin-top: 15px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
 .example-questions p { margin-bottom: 8px; }
 
 .example-question {
@@ -430,8 +434,8 @@ html.dark-mode table.dataTable tbody tr:hover > * {
     padding: 0;
     border: none;
     border-radius: 50%;
-    background-color: #000;
-    color: #fff;
+    background-color: var(--button-bg);
+    color: var(--button-text);
     font-size: 26px;
     line-height: 1;
     cursor: pointer;
@@ -443,29 +447,15 @@ html.dark-mode table.dataTable tbody tr:hover > * {
 }
 
 #backToTopButton:hover {
-    background-color: #222;
-}
-
-/* Back to Top button in dark mode */
-.dark-mode #backToTopButton {
-    background-color: #fff;
-}
-
-.dark-mode #backToTopButton .arrow-up {
-    border-top-color: #000;
-    border-left-color: #000;
-}
-
-.dark-mode #backToTopButton:hover {
-    background-color: #ddd;
+    background-color: var(--surface-hover);
 }
 
 /* Thicker Back to Top arrow */
 .arrow-up {
     width: 12px;
     height: 12px;
-    border-top: 3px solid white;
-    border-left: 3px solid white;
+    border-top: 3px solid currentColor;
+    border-left: 3px solid currentColor;
     transform: translateY(3px) rotate(45deg);
 }
 
@@ -490,28 +480,17 @@ html.dark-mode table.dataTable tbody tr:hover > * {
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid #ccc;
+    border: 1px solid var(--border);
     border-radius: 6px;
-    background-color: #f0f0f0;
-    color: #000;
+    background-color: var(--surface-secondary);
+    color: var(--text);
     font-size: 16px;
     font-weight: bold;
     cursor: pointer;
 }
 
 .text-size-controls button:hover {
-    background-color: #ddd;
-}
-
-/* Text size buttons in dark mode */
-.dark-mode .text-size-controls button {
-    border-color: #555;
-    background-color: #333;
-    color: #fff;
-}
-
-.dark-mode .text-size-controls button:hover {
-    background-color: #444;
+    background-color: var(--surface-hover);
 }
 
 /* Collapsible section heading */
@@ -525,8 +504,8 @@ html.dark-mode table.dataTable tbody tr:hover > * {
     margin-bottom: 15px;
     border: none;
     border-radius: 6px;
-    background: #eee;
-    color: #000;
+    background: var(--surface-secondary);
+    color: var(--text);
     font-size: 1.4em;
     font-weight: bold;
     text-align: left;
@@ -535,7 +514,7 @@ html.dark-mode table.dataTable tbody tr:hover > * {
 
 /* Hover effect */
 .section-toggle:hover {
-    background: #ddd;
+    background: var(--surface-hover);
 }
 
 /* Hide content when collapsed */
@@ -674,6 +653,11 @@ body.modal-open { overflow: hidden; }
 .chat-modal.hidden { display: none; }
 .chat-dialog {
     width: min(920px, 96vw);
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow-y: auto;
+    min-height: 0;
     max-height: 88vh;
     display: flex;
     flex-direction: column;
@@ -699,6 +683,9 @@ body.modal-open { overflow: hidden; }
     padding: 4px 10px;
 }
 .chat-messages {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     min-height: 280px;
     max-height: 48vh;
     overflow-y: auto;
@@ -712,6 +699,9 @@ body.modal-open { overflow: hidden; }
 }
 .chat-bubble {
     max-width: 82%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow-wrap: anywhere;
     padding: 10px 12px;
     border-radius: 10px;
     white-space: pre-wrap;
@@ -732,6 +722,17 @@ body.modal-open { overflow: hidden; }
     padding-left: 18px;
     font-size: 0.9em;
 }
+
+.chat-source-list a {
+    color: var(--link);
+    text-decoration: none;
+}
+
+.chat-source-list a:hover,
+.chat-source-list a:focus {
+    text-decoration: underline;
+}
+
 .chat-input-row { align-items: stretch; }
 .chat-source-card { margin-top: 0; }
 .visually-hidden {
@@ -746,6 +747,10 @@ body.modal-open { overflow: hidden; }
     border: 0 !important;
 }
 
+.chat-source-heading {
+    margin-top: 20px;
+}
+
 .filter-row select {
     width: 100%;
     min-width: 120px;
@@ -755,4 +760,33 @@ body.modal-open { overflow: hidden; }
     .chat-dialog { max-height: 94vh; padding: 14px; }
     .chat-messages { min-height: 220px; }
     .chat-bubble { max-width: 95%; }
+}
+
+.chat-copy-button {
+    margin-top: 10px;
+    padding: 6px 10px;
+    font-size: 0.85rem;
+    background: var(--surface-secondary);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+.chat-copy-button:hover {
+    background: var(--surface-hover);
+}
+
+.copy-video-link-button {
+    display: block;
+    margin-top: 6px;
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    background: var(--surface-secondary);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.copy-video-link-button:hover {
+    background: var(--surface-hover);
 }
