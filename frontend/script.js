@@ -626,6 +626,10 @@ async function analyzeChannel() {
         displayAnalytics(data.analytics);
         displayVideos(data.videos);
 
+        // Hides the loading message after displaying results
+        loadingMessage.classList.add("hidden");
+        analyzeButton.disabled = false;
+        
         // Remember the resolved channel so questions use the same analysis.
         activeChannelId = resolvedChannelId;
 
