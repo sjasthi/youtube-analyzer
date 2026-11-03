@@ -11,6 +11,7 @@
 const backendStatus = document.getElementById("backendStatus");
 const analyzeButton = document.getElementById("analyzeButton");
 const channelInput = document.getElementById("channelInput");
+const clearInputButton = document.getElementById("clearInputButton");
 const loadingMessage = document.getElementById("loadingMessage");
 const errorMessage = document.getElementById("errorMessage");
 const channelSection = document.getElementById("channelSection");
@@ -1076,6 +1077,12 @@ analyzeButton.addEventListener("click", analyzeChannel);
 // Pressing Enter in the channel input does the same thing.
 channelInput.addEventListener("keydown", event => {
     if (event.key === "Enter") analyzeChannel();
+});
+
+// Clears channel input
+clearInputButton.addEventListener("click", () => {
+    channelInput.value = "";
+    channelInput.focus();
 });
 
 // Clears the question and answer fields when the page loads

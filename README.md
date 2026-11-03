@@ -155,6 +155,7 @@
 - Improved source formatting in the Channel RAG Chatbot with numbered sources, timestamp labels, and consistent link styling
 - Fixed example questions overflowing the chatbot popup at maximum text size
 - Added Copy Link buttons to the Recent Videos section
+- Added a Clear button that only clears the channel input
 
 
 
