@@ -328,7 +328,11 @@ function makeStatusBadge(kind, label, className, tooltip = "") {
     badge.className = `status-badge ${className}`;
     badge.dataset.kind = kind;
     badge.textContent = label;
-    badge.title = tooltip;
+
+    if (tooltip) {
+        badge.title = tooltip;
+    }
+
     return badge;
 }
 
@@ -417,7 +421,7 @@ function displayVideos(videos) {
             typeCell.appendChild(typeBadge);
             typeCell.title = typeLabel === "Short-form candidate"
                 ? "Duration is 3 minutes or less. The YouTube Data API does not expose the aspect-ratio signal needed to prove this is a Short."
-                : "Not classified as a short-form candidate from duration alone.";
+                : "Not classified as a short-form candidate from duration alone";
 
             const transcriptCell = document.createElement("td");
             transcriptCell.className = "transcript-status-cell compact-status-cell";
