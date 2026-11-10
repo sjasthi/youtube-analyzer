@@ -157,7 +157,11 @@
 - Added Copy Link buttons to the Recent Videos section
 - Added a Clear button that only clears the channel input
 
-
+<b>FP8</b>
+- Added a Clear button to the Channel RAG Chatbot to clear the question input
+- Added a Copy Transcript button to the Cached Transcript Viewer
+- Added tooltips to the Transcript and RAG columns in Recent Videos
+- Improved text resizing for status labels in Recent Videos
 
 
 ## Authors

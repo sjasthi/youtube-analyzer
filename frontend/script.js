@@ -49,6 +49,7 @@ const questionInput = document.getElementById("questionInput");
 const askQuestionButton = document.getElementById("askQuestionButton");
 const indexRagButton = document.getElementById("indexRagButton");
 const transcriptStatus = document.getElementById("transcriptStatus");
+const clearQuestionButton = document.getElementById("clearQuestionButton");
 const newChatButton = document.getElementById("newChatButton");
 const exampleQuestions = document.querySelectorAll(".example-question");
 const openChatButton = document.getElementById("openChatButton");
@@ -67,6 +68,7 @@ const transcriptVideoSelect = document.getElementById("transcriptVideoSelect");
 const loadTranscriptButton = document.getElementById("loadTranscriptButton");
 const transcriptViewerMeta = document.getElementById("transcriptViewerMeta");
 const transcriptViewerText = document.getElementById("transcriptViewerText");
+const copyTranscriptButton = document.getElementById("copyTranscriptButton");
 
 // Store the current Chart.js object so it can be replaced on the next search.
 let uploadTrendChart = null;
@@ -321,11 +323,12 @@ function videoTypeLabel(video) {
     return seconds > 0 && seconds <= 180 ? "Short-form candidate" : "Regular / unknown";
 }
 
-function makeStatusBadge(kind, label, className) {
+function makeStatusBadge(kind, label, className, tooltip = "") {
     const badge = document.createElement("span");
     badge.className = `status-badge ${className}`;
     badge.dataset.kind = kind;
     badge.textContent = label;
+    badge.title = tooltip;
     return badge;
 }
 
@@ -519,13 +522,37 @@ function updateVideoStatusRows(statuses) {
         if (transcriptCell) {
             const transcriptLabel = status.transcript_cached ? "Cached" : (status.processing_phase === "transcripts" ? "Retrieving…" : "Not cached");
             transcriptCell.dataset.search = transcriptLabel;
-            transcriptCell.replaceChildren(makeStatusBadge("transcript", transcriptLabel, status.transcript_cached ? "status-success" : (status.processing_phase ? "status-processing" : "status-missing")));
+            
+            const transcriptTooltip = status.transcript_cached
+                ? "Transcript is saved in SQLite"
+                : "";
+                
+            transcriptCell.replaceChildren(
+                makeStatusBadge(
+                    "transcript",
+                    transcriptLabel,
+                    status.transcript_cached ? "status-success" : (status.processing_phase ? "status-processing" : "status-missing"),
+                    transcriptTooltip
+                )
+            );
         }
         if (ragCell) {
             ragCell.innerHTML = "";
             const label = status.rag_indexed ? "Indexed" : (status.processing_phase === "embedding" ? "Embedding…" : "Not indexed");
             ragCell.dataset.search = label;
-            ragCell.appendChild(makeStatusBadge("rag", label, status.rag_indexed ? "status-success" : (status.processing_phase ? "status-processing" : "status-missing")));
+            
+            const ragTooltip = status.rag_indexed
+                ? "Transcript is indexed for chatbot questions"
+                : "";
+
+            ragCell.appendChild(
+                makeStatusBadge(
+                    "rag",
+                    label,
+                    status.rag_indexed ? "status-success" : (status.processing_phase ? "status-processing" : "status-missing"),
+                    ragTooltip
+                )
+            );
             if (!status.rag_indexed && !status.processing_phase) {
                 const button = document.createElement("button");
                 button.type = "button";
@@ -582,6 +609,7 @@ async function analyzeChannel() {
     questionSection.classList.add("hidden");
     transcriptViewerSection.classList.add("hidden");
     transcriptVideoSelect.innerHTML = '<option value="">No cached transcripts loaded</option>';
+    copyTranscriptButton.disabled = true;
     loadTranscriptButton.disabled = true;
     transcriptViewerMeta.textContent = "";
     transcriptViewerText.textContent = "Select a cached transcript to view it here.";
@@ -932,6 +960,7 @@ async function refreshTranscriptViewer() {
         if (transcripts.length === 0) {
             transcriptVideoSelect.innerHTML = '<option value="">No cached transcripts yet</option>';
             loadTranscriptButton.disabled = true;
+            copyTranscriptButton.disabled = true;
             transcriptViewerMeta.textContent = "";
             transcriptViewerText.textContent = "Index RAG content or run youtube_transcriptor.py to create cached transcripts.";
             return;
@@ -955,6 +984,7 @@ async function refreshTranscriptViewer() {
         transcriptViewerText.textContent = "Select a cached transcript to view it here.";
     } catch (error) {
         loadTranscriptButton.disabled = true;
+        copyTranscriptButton.disabled = true;
         transcriptViewerMeta.textContent = `Unable to load cached transcripts: ${error.message}`;
     }
 }
@@ -971,6 +1001,7 @@ async function viewSelectedTranscript() {
     }
 
     loadTranscriptButton.disabled = true;
+    copyTranscriptButton.disabled = true;
     transcriptViewerText.textContent = "Loading cached transcript...";
 
     try {
@@ -1001,8 +1032,10 @@ async function viewSelectedTranscript() {
         } else {
             transcriptViewerText.textContent = data.transcript || "This cached transcript is empty.";
         }
+        copyTranscriptButton.disabled = false;
     } catch (error) {
         transcriptViewerText.textContent = `Error: ${error.message}`;
+        copyTranscriptButton.disabled = true;
     } finally {
         loadTranscriptButton.disabled = false;
     }
@@ -1012,6 +1045,23 @@ transcriptVideoSelect.addEventListener("change", () => {
     if (transcriptVideoSelect.value) viewSelectedTranscript();
 });
 loadTranscriptButton.addEventListener("click", viewSelectedTranscript);
+
+// Copies the currently displayed transcript
+copyTranscriptButton.addEventListener("click", async () => {
+    const transcript = transcriptViewerText.innerText.trim();
+    if (!transcript) return;
+    try {
+        await navigator.clipboard.writeText(transcript);
+        copyTranscriptButton.textContent = "Copied!";
+
+        setTimeout(() => {
+            copyTranscriptButton.textContent = "Copy Transcript";
+        }, 2000);
+
+    } catch (error) {
+        copyTranscriptButton.textContent = "Copy failed";
+    }
+});
 
 // Index transcript content only when the user explicitly requests it.
 indexRagButton.addEventListener("click", indexRagContent);
@@ -1083,6 +1133,13 @@ channelInput.addEventListener("keydown", event => {
 clearInputButton.addEventListener("click", () => {
     channelInput.value = "";
     channelInput.focus();
+});
+
+// Clears chatbot question input
+clearQuestionButton.addEventListener("click", () => {
+    questionInput.value = "";
+    askQuestionButton.disabled = true;
+    questionInput.focus();
 });
 
 // Clears the question and answer fields when the page loads
