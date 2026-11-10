@@ -158,6 +158,12 @@
 - Added a Clear button that only clears the channel input
 
 
+<b>FP9</b>
+- Channel-wide summary: Add a chroma-based Generate Channel Summary feature that uses the indexed video to summarize the channel.
+- Metadata list fix: Chatbot couldn't answer questions such as "what are the 10 most recent videos?" Now it uses the analyzed video list to get the information
+- Gemini reliability improvements: Added Gemini 3.8 flash -> Gemini 3.5 Flash-lite as a fallback
+- Fallback testing: Added mocked offline unit tests to verify retry, fallback, recovery, error handling, and safety behavior without making live Gemini API calls. "test/test_llm_fallback.py"
+
 
 
 ## Authors
@@ -208,6 +214,7 @@ The application uses the YouTube Data API for channel/video information, SQLite 
 - Use Sentence Transformers for embeddings
 - Use Chroma for semantic retrieval
 - Use Gemini for generated answers
+- Generate a grounded channel-wide summary across indexed videos
 - Show unique source video links for RAG answers
 - To test RAG without live transcript requests, set `RAG_TEST_MODE=true` in `.env`
 
@@ -267,12 +274,41 @@ Example `.env` settings:
 ```text
 YOUTUBE_API_KEY=your_youtube_api_key
 GEMINI_API_KEY=your_gemini_api_key
-GEMINI_MODEL=gemini-3.5-flash-lite
+GEMINI_MODEL=gemini-3.8-flash
+GEMINI_FALLBACK_MODELS=gemini-3.5-flash-lite
+GEMINI_503_MAX_RETRIES=2
+GEMINI_503_RETRY_BASE_SECONDS=1.0
 RAG_TRANSCRIPT_VIDEO_LIMIT=1
 RAG_TEST_MODE=false
 ```
 
-`RAG_TRANSCRIPT_VIDEO_LIMIT=0` means use all available videos. Any positive value uses only the newest N videos.
+If you already have a local `.env`, update these two model lines there as well; `.env` overrides the defaults shown in `.env.example` and in the Python code.
+
+`GEMINI_FALLBACK_MODELS` is an ordered, comma-separated downgrade chain. The current default is **Gemini 3.8 Flash → Gemini 3.5 Flash-Lite**.
+
+Fallback behavior distinguishes temporary provider load from longer-lived model limits:
+
+- **503 / high demand / temporary unavailable:** the backend retries the same model using exponential backoff (`GEMINI_503_MAX_RETRIES=2` gives up to three total attempts, with 1s then 2s waits by default). If it is still unavailable, the backend temporarily uses the next model for the rest of that Channel Summary or hierarchical comparison. A new summary starts by trying the preferred model again.
+- **429 / rate or quota limit, or explicit model-access/not-found failure:** the backend moves to the next model and keeps that lower-priority model active for the rest of the current FastAPI process. Restarting FastAPI resets the process preference to `GEMINI_MODEL`.
+- **Authentication errors, malformed requests, empty responses, and content-safety/policy failures:** generation stops instead of using another model to bypass the underlying error.
+
+Set `GEMINI_FALLBACK_MODELS=` to disable automatic model fallback. Set `GEMINI_503_MAX_RETRIES=0` to disable same-model 503 retries.
+
+### Known AI Availability Limitation
+
+Channel Summary depends on an external Gemini service. If both configured models are temporarily unavailable after retries, the analyzer keeps the indexed transcript evidence and source list available but reports that synthesis could not be completed. Multi-provider LLM failover was considered but intentionally deferred to keep the capstone MVP smaller, easier to test, and free of additional provider/API dependencies.
+
+For the web **Index RAG Content** action, `RAG_TRANSCRIPT_VIDEO_LIMIT` is a
+per-run batch size for videos that are not yet indexed in Chroma. The channel's
+cached videos are considered newest-first, already-indexed videos are skipped,
+and then the next N unindexed videos are processed. For example, a value of `3`
+indexes up to the next 3 missing videos each time the button is used. A value
+of `0` processes all currently unindexed cached videos.
+
+This means repeated indexing runs continue farther down the cached channel
+instead of repeatedly inspecting only the same newest videos. Newly uploaded
+videos still receive priority once they appear in the channel cache because the
+candidate list is ordered newest-first.
 
 Optional Chroma/RAG settings:
 
@@ -353,6 +389,7 @@ GET /api/rag/stats?channel_id=UC_CHANNEL_ID
 - Posting trends
 - Hyperlinked videos
 - RAG-generated answers
+- Channel-wide RAG summary across indexed videos
 - Unique source video links
 
 ## Important Design Decisions
@@ -361,6 +398,8 @@ GET /api/rag/stats?channel_id=UC_CHANNEL_ID
 - Transcript indexing and question answering are separate operations.
 - **Index RAG Content** is the only normal UI action that retrieves missing transcripts.
 - **Ask Question** searches only the current channel's already-indexed Chroma content.
+- **Generate Channel Summary** reads only existing Chroma content and never retrieves new transcripts.
+- Channel summaries sample representative chunks from every indexed video and use bounded hierarchical Gemini synthesis for larger channels.
 - Chroma is checked before transcript retrieval so an already-indexed video is not processed again.
 - If Chroma does not contain a selected video during indexing, `transcript_service.py` checks SQLite before contacting YouTube.
 - Chroma metadata includes `channel_id`, `channel_title`, `video_id`, title, publication date/timestamp, video duration, language, chunk timing, indexing time, transcript source/hash, embedding model, chunking version, and metadata version when available.
@@ -374,7 +413,7 @@ GET /api/rag/stats?channel_id=UC_CHANNEL_ID
 | --- | --- | --- | --- |
 | `youtube-transcript-api` | may still be blocked by YouTube after frequent requests or depending on the network/IP. | A large channel may stop processing before every transcript is retrieved. | Save every successful transcript to SQLite. Add a delay between request. RAG building is from saved transcripts.|
 | YouTube Data API v3 | default daily quota cost(10,000/day). Each page require additional requests | Large channels, repeat analysis, or repeated development/testing can use a lot of daily quota and prevent channel/video metadata retrieval | Cache channel and video metadata in SQLite. Reuse previously retrieved data, avoid unneccessary repeated request and process what is needed during testing |
-| Gemini API free tier | Gemini requires a valid API key and can occasionally be unavailable because of provider demand. | Chatbot may be unable to generate answers even when chroma retrieves the correct chunks. Large retrieved context uses more tokens | Keeps retrieveal and generation separate and preserve a retreval/fallback path so indexed content is not lost when Gemini is unavaliable |
+| Gemini API free tier | Gemini requires a valid API key and can occasionally be unavailable because of provider demand or rate/token limits. | Chatbot generation may fail even when Chroma retrieves the correct chunks. Large channel summaries may require several bounded Gemini calls, increasing total quota usage even though each individual prompt is kept smaller. | Keep retrieval/indexing local, use bounded hierarchical summary/comparison batches, and preserve indexed Chroma content when Gemini is unavailable. |
 | `intfloat/Multilingual-e5-small`/ Sentence Transformers | Low-performance PC may struggle because of CPU/RAM/Disk usage. Has 100 languages, but retrieval quality can vary for lower-resource language. Model has a finite input length, so long transcripts need to be chunked. | Inital setup can be slower. CPU only computer and multilingual retrieval quality is not identical for evey supported language | Chunk transcripts before embedding. Persist embeddings in Chroma so they're not recreated every question. track the embedding model in metadata and rebuild from cached SQLite transcripts when the embedding model changes |
 | Chroma | Only limits are computer's disk pace, memory and processing speed | A large transcript collection can increase local storage and retrieval/indexing time. | Reuse persistent local collections, avoid duplicate indexing, store metadata, and use persistent storage if the app is deployed |
 | SQLite | limited concurrent-write scalability compared with PostgreSQL or other server databases | may become a bottleneck if many users attempted to write transcripts/channel data at the same time in a production deployment | Keeps SQLite for local caching and preprocessing. A production version could replace the database service with PostgreSQL without changing the RAG architecture |

@@ -161,6 +161,29 @@
             </div>
         </section>
 
+        <!-- FP9: Chroma-only channel-wide summary across indexed videos. -->
+        <section id="channelSummarySection" class="card hidden">
+            <button type="button" class="section-toggle" aria-expanded="true" aria-controls="channelSummaryContent">
+                <span>Channel Summary</span>
+                <span class="toggle-icon" aria-hidden="true">−</span>
+            </button>
+            <div id="channelSummaryContent" class="collapsible-content">
+                <p class="note">Generate a grounded summary across all videos currently indexed in Chroma. This does not retrieve new transcripts from YouTube.</p>
+                <div class="channel-summary-actions">
+                    <button id="generateChannelSummaryButton" type="button">Generate Channel Summary</button>
+                    <button id="copyChannelSummaryButton" type="button" class="secondary-button hidden">Copy Summary</button>
+                </div>
+                <div id="channelSummaryStatus" class="channel-summary-status muted" aria-live="polite">Index RAG content first, then generate a channel-wide summary.</div>
+                <div id="channelSummaryResult" class="channel-summary-result hidden">
+                    <pre id="channelSummaryText" class="channel-summary-text"></pre>
+                    <details id="channelSummarySources" class="channel-summary-sources">
+                        <summary>Indexed videos used as sources</summary>
+                        <ol id="channelSummarySourceList"></ol>
+                    </details>
+                </div>
+            </div>
+        </section>
+
         <!-- Cache-only transcript viewer. Opening this never contacts YouTube. -->
         <section id="transcriptViewerSection" class="card hidden">
             <button type="button" class="section-toggle" aria-expanded="true" aria-controls="transcriptViewerContent">
