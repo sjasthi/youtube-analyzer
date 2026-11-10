@@ -62,6 +62,15 @@ const indexProgressText = document.getElementById("indexProgressText");
 const indexProgressCount = document.getElementById("indexProgressCount");
 const indexProgressBar = document.getElementById("indexProgressBar");
 
+// FP9 channel-wide summary elements.
+const channelSummarySection = document.getElementById("channelSummarySection");
+const generateChannelSummaryButton = document.getElementById("generateChannelSummaryButton");
+const copyChannelSummaryButton = document.getElementById("copyChannelSummaryButton");
+const channelSummaryStatus = document.getElementById("channelSummaryStatus");
+const channelSummaryResult = document.getElementById("channelSummaryResult");
+const channelSummaryText = document.getElementById("channelSummaryText");
+const channelSummarySourceList = document.getElementById("channelSummarySourceList");
+
 // Cache-only transcript viewer elements.
 const transcriptViewerSection = document.getElementById("transcriptViewerSection");
 const transcriptVideoSelect = document.getElementById("transcriptVideoSelect");
@@ -611,6 +620,12 @@ async function analyzeChannel() {
     analyticsSection.classList.add("hidden");
     videosSection.classList.add("hidden");
     questionSection.classList.add("hidden");
+    channelSummarySection.classList.add("hidden");
+    channelSummaryResult.classList.add("hidden");
+    channelSummaryText.textContent = "";
+    channelSummarySourceList.innerHTML = "";
+    channelSummaryStatus.textContent = "Index RAG content first, then generate a channel-wide summary.";
+    copyChannelSummaryButton.classList.add("hidden");
     transcriptViewerSection.classList.add("hidden");
     transcriptVideoSelect.innerHTML = '<option value="">No cached transcripts loaded</option>';
     copyTranscriptButton.disabled = true;
@@ -670,6 +685,7 @@ async function analyzeChannel() {
         // separate user action, so channel analysis itself does not retrieve
         // transcripts.
         questionSection.classList.remove("hidden");
+        channelSummarySection.classList.remove("hidden");
         transcriptViewerSection.classList.remove("hidden");
         await refreshRagCoverage();
         await refreshTranscriptViewer();
@@ -705,11 +721,13 @@ async function refreshRagCoverage() {
                 severity: "success",
                 message: `RAG already has ${videoCount} indexed video${videoCount === 1 ? "" : "s"} (${chunkCount} transcript chunks) for this channel.`,
             });
+            channelSummaryStatus.textContent = `Ready to summarize ${videoCount} indexed video${videoCount === 1 ? "" : "s"}.`;
         } else {
             displayTranscriptStatus({
                 severity: "info",
                 message: "No transcript content is indexed for RAG yet. Click 'Index RAG Content' when you are ready to retrieve/index transcripts.",
             });
+            channelSummaryStatus.textContent = "No indexed videos are available for a channel summary yet. Index RAG content first.";
         }
     } catch (error) {
         // RAG stats are informational; channel analysis should still work if
@@ -788,6 +806,10 @@ async function pollIndexJob() {
             indexRagButton.textContent = job.state === "completed" ? "Index RAG Content" : "Resume Indexing";
             cancelIndexButton.classList.add("hidden");
             indexProgressBar.value = job.state === "completed" ? 100 : percent;
+            channelSummaryResult.classList.add("hidden");
+            channelSummaryText.textContent = "";
+            channelSummarySourceList.innerHTML = "";
+            copyChannelSummaryButton.classList.add("hidden");
             await refreshTranscriptViewer();
             await refreshRagCoverage();
             await refreshVideoStatuses();
@@ -946,6 +968,80 @@ async function askQuestion() {
 }
 
 
+// FP9: Generate a bounded channel-wide summary from existing Chroma content only.
+async function generateChannelSummary() {
+    if (!activeChannelId) {
+        channelSummaryStatus.textContent = "Analyze a channel before generating a summary.";
+        return;
+    }
+
+    generateChannelSummaryButton.disabled = true;
+    generateChannelSummaryButton.textContent = "Generating...";
+    copyChannelSummaryButton.classList.add("hidden");
+    channelSummaryResult.classList.add("hidden");
+    channelSummaryStatus.textContent = "Summarizing indexed channel content. Larger channels may require several bounded Gemini calls...";
+
+    try {
+        const response = await fetch(
+            `/api/channel/${encodeURIComponent(activeChannelId)}/summary`,
+            { method: "POST" }
+        );
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Unable to generate channel summary.");
+
+        const indexedCount = Number(data.indexed_video_count || 0);
+        const chunkCount = Number(data.representative_chunk_count || 0);
+        channelSummaryText.textContent = data.summary || "No summary was returned.";
+        channelSummaryStatus.textContent = `Summarized ${indexedCount} indexed video${indexedCount === 1 ? "" : "s"} using ${chunkCount} representative transcript chunk${chunkCount === 1 ? "" : "s"}.`;
+
+        channelSummarySourceList.innerHTML = "";
+        (data.sources || []).forEach(source => {
+            const item = document.createElement("li");
+            const link = document.createElement("a");
+            link.href = source.video_url || `https://www.youtube.com/watch?v=${encodeURIComponent(source.video_id || "")}`;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.textContent = source.title || source.video_id || "Unknown video";
+            item.appendChild(link);
+
+            const details = [];
+            if (source.published_at) details.push(formatDate(source.published_at));
+            if (source.language) details.push(source.language);
+            if (details.length) {
+                const meta = document.createElement("span");
+                meta.className = "channel-summary-source-meta muted";
+                meta.textContent = ` — ${details.join(" · ")}`;
+                item.appendChild(meta);
+            }
+            channelSummarySourceList.appendChild(item);
+        });
+
+        channelSummaryResult.classList.remove("hidden");
+        copyChannelSummaryButton.classList.remove("hidden");
+        if (data.generation_warning) {
+            channelSummaryStatus.textContent += ` Warning: ${data.generation_warning}`;
+        }
+    } catch (error) {
+        channelSummaryStatus.textContent = `Unable to generate channel summary: ${error.message}`;
+    } finally {
+        generateChannelSummaryButton.disabled = false;
+        generateChannelSummaryButton.textContent = "Generate Channel Summary";
+    }
+}
+
+async function copyChannelSummary() {
+    const text = channelSummaryText.textContent.trim();
+    if (!text) return;
+    try {
+        await navigator.clipboard.writeText(text);
+        copyChannelSummaryButton.textContent = "Copied!";
+        setTimeout(() => { copyChannelSummaryButton.textContent = "Copy Summary"; }, 2000);
+    } catch (error) {
+        copyChannelSummaryButton.textContent = "Copy failed";
+        setTimeout(() => { copyChannelSummaryButton.textContent = "Copy Summary"; }, 2000);
+    }
+}
+
 // Load the list of transcripts that already exist in SQLite. This endpoint is
 // cache-only and will never trigger youtube-transcript-api.
 async function refreshTranscriptViewer() {
@@ -1044,6 +1140,9 @@ async function viewSelectedTranscript() {
         loadTranscriptButton.disabled = false;
     }
 }
+
+generateChannelSummaryButton.addEventListener("click", generateChannelSummary);
+copyChannelSummaryButton.addEventListener("click", copyChannelSummary);
 
 transcriptVideoSelect.addEventListener("change", () => {
     if (transcriptVideoSelect.value) viewSelectedTranscript();

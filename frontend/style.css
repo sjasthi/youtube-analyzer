@@ -790,3 +790,56 @@ body.modal-open { overflow: hidden; }
 .copy-video-link-button:hover {
     background: var(--surface-hover);
 }
+/* FP9 channel-wide summary. */
+.channel-summary-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.channel-summary-status {
+    margin: 8px 0 14px;
+    line-height: 1.45;
+}
+
+.channel-summary-result {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-secondary);
+    padding: 16px;
+}
+
+.channel-summary-text {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: Arial, sans-serif;
+    line-height: 1.55;
+    color: var(--text);
+    background: transparent;
+}
+
+.channel-summary-sources {
+    margin-top: 16px;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+}
+
+.channel-summary-sources summary {
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.channel-summary-sources ol {
+    margin-bottom: 0;
+    padding-left: 24px;
+}
+
+.channel-summary-sources li {
+    margin-top: 8px;
+}
+
+.channel-summary-source-meta {
+    font-size: 0.875rem;
+}

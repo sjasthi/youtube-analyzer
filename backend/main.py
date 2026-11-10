@@ -42,6 +42,7 @@ from backend.rag_service import (
     get_indexed_video_ids,
     get_rag_storage_stats,
     index_transcripts,
+    summarize_channel,
 )
 
 # Create the FastAPI application.
@@ -153,6 +154,54 @@ def select_rag_videos(videos: list[dict]) -> list[dict]:
         raise ValueError("RAG_TRANSCRIPT_VIDEO_LIMIT must be 0 or a positive integer.")
 
     return videos[:RAG_TRANSCRIPT_VIDEO_LIMIT]
+
+
+def _videos_newest_first(videos: list[dict]) -> list[dict]:
+    """Return channel videos newest-first while preserving unknown dates last."""
+
+    return sorted(
+        videos,
+        key=lambda video: str(video.get("published_at") or ""),
+        reverse=True,
+    )
+
+
+def select_next_unindexed_rag_videos(
+    channel_id: str,
+    videos: list[dict],
+) -> tuple[list[dict], set[str], int]:
+    """Select the next unindexed videos for one channel-indexing run.
+
+    ``RAG_TRANSCRIPT_VIDEO_LIMIT`` is intentionally applied *after* checking
+    Chroma. This makes a positive limit mean "index up to the next N missing
+    videos" rather than "only ever inspect the newest N channel videos".
+
+    Returns ``(selected_missing_videos, indexed_video_ids,
+    total_missing_video_count)``. A limit of 0 selects every missing video.
+    """
+
+    ordered_videos = _videos_newest_first(videos)
+    video_ids = [str(video["video_id"]) for video in ordered_videos]
+    indexed_video_ids = get_indexed_video_ids(channel_id, video_ids)
+    missing_videos = [
+        video
+        for video in ordered_videos
+        if str(video["video_id"]) not in indexed_video_ids
+    ]
+
+    total_missing_video_count = len(missing_videos)
+
+    if RAG_TRANSCRIPT_VIDEO_LIMIT == 0:
+        return missing_videos, indexed_video_ids, total_missing_video_count
+
+    if RAG_TRANSCRIPT_VIDEO_LIMIT < 0:
+        raise ValueError("RAG_TRANSCRIPT_VIDEO_LIMIT must be 0 or a positive integer.")
+
+    return (
+        missing_videos[:RAG_TRANSCRIPT_VIDEO_LIMIT],
+        indexed_video_ids,
+        total_missing_video_count,
+    )
 
 # Test mode keeps RAG development independent from live transcript requests.
 RAG_TEST_MODE = os.getenv(
@@ -602,7 +651,16 @@ def _answer_video_identity_query(
     video's transcript has never been indexed. If the wording asks about the
     video's content, the function returns None so normal RAG handles it.
     """
-    if not videos or _requests_video_content(question) or _is_comparison_question(question):
+    # Multi-video ranked list questions (for example, "What are the 5 most
+    # recent uploads?") must be handled by the ranked-list metadata route.
+    # Without this guard, the generic "latest video" identity route returns
+    # early with only one video.
+    if (
+        not videos
+        or _requests_video_content(question)
+        or _is_comparison_question(question)
+        or _ranked_video_list_request(question) is not None
+    ):
         return None
 
     target_ids, query_scope, matched_titles = _metadata_scope(question, videos, channel_id)
@@ -707,8 +765,8 @@ _RANK_COUNT_WORDS = {
 def _ranked_video_list_request(question: str) -> tuple[int, str] | None:
     """Detect ranked metadata-list questions such as 'top 5 most recent videos'.
 
-    These questions should be answered from indexed-video metadata, not from
-    transcript text. Returning None leaves normal semantic RAG behavior intact.
+    These questions should be answered from cached channel-video metadata, not
+    from transcript text. Returning None leaves normal semantic RAG behavior intact.
     """
     text = str(question or "").strip().lower()
     if not any(token in text for token in ("video", "videos", "upload", "uploads")):
@@ -745,7 +803,7 @@ def _ranked_video_list_request(question: str) -> tuple[int, str] | None:
 
 
 def _sort_ranked_videos(videos: list[dict], rank_mode: str) -> list[dict]:
-    """Sort cached/indexed videos for metadata-list questions."""
+    """Sort cached channel videos for metadata-list questions."""
     if rank_mode == "latest":
         return sorted(videos, key=lambda v: str(v.get("published_at") or ""), reverse=True)
     if rank_mode == "oldest":
@@ -981,18 +1039,35 @@ def _run_index_job(job_id: str, channel_id: str, requested_video_id: str | None)
         if result is None:
             raise RuntimeError("YouTube channel was not found.")
 
-        videos = select_rag_videos(result["videos"])
+        all_videos = _videos_newest_first(result["videos"])
+        videos = all_videos
         if requested_video_id:
-            videos = [v for v in result["videos"] if str(v.get("video_id")) == requested_video_id]
+            videos = [v for v in all_videos if str(v.get("video_id")) == requested_video_id]
             if not videos:
                 raise RuntimeError("Requested video was not found in this channel.")
 
-        if channel_requires_embedding_rebuild(channel_id):
+        # For normal channel indexing, first skip everything already present in
+        # Chroma, then apply the per-run limit to the remaining videos. This
+        # lets repeated clicks continue down the cached channel list while new
+        # uploads (which sort first) still receive priority.
+        if requested_video_id:
+            selected_missing, indexed_before, total_missing_before_limit = (
+                select_next_unindexed_rag_videos(channel_id, videos)
+            )
+        else:
+            selected_missing, indexed_before, total_missing_before_limit = (
+                select_next_unindexed_rag_videos(channel_id, all_videos)
+            )
+            videos = selected_missing
+
+        selected_new_ids = {str(video["video_id"]) for video in selected_missing}
+
+        requires_rebuild = channel_requires_embedding_rebuild(channel_id)
+
+        if requires_rebuild:
             _job_update(job_id, phase="rebuilding", message="Rebuilding Chroma for the current embedding model...")
-            all_videos = result["videos"]
             previous_ids = get_indexed_video_ids(channel_id, [v["video_id"] for v in all_videos])
-            selected_ids = {str(v["video_id"]) for v in videos}
-            rebuild_ids = previous_ids | selected_ids
+            rebuild_ids = previous_ids | selected_new_ids
             rebuild_videos = [v for v in all_videos if str(v.get("video_id")) in rebuild_ids]
             cached = get_cached_video_transcripts(rebuild_videos)
             missing_old = set(cached["missing_video_ids"]) & previous_ids
@@ -1001,9 +1076,31 @@ def _run_index_job(job_id: str, channel_id: str, requested_video_id: str | None)
             delete_channel_index(channel_id)
             videos = rebuild_videos
 
-        enrich_indexed_video_metadata(channel_id, videos, channel_title=result["channel"].get("title"))
-        missing_videos, indexed_before = get_missing_rag_videos(channel_id, videos)
-        _job_update(job_id, total_video_count=len(videos), already_indexed_count=len(indexed_before), remaining_count=len(missing_videos), phase="transcripts")
+        enrich_indexed_video_metadata(channel_id, all_videos, channel_title=result["channel"].get("title"))
+
+        if requires_rebuild:
+            # The branch above deletes the old index, so all rebuild videos now
+            # need to be indexed again from SQLite/new transcript retrieval.
+            missing_videos, indexed_before_for_batch = get_missing_rag_videos(channel_id, videos)
+            progress_already_indexed = 0
+        elif requested_video_id:
+            missing_videos = selected_missing
+            indexed_before_for_batch = indexed_before
+            progress_already_indexed = 1 if not missing_videos and requested_video_id in indexed_before else 0
+        else:
+            missing_videos = selected_missing
+            indexed_before_for_batch = indexed_before
+            progress_already_indexed = 0
+
+        _job_update(
+            job_id,
+            total_video_count=len(videos) if requires_rebuild else max(len(missing_videos), progress_already_indexed),
+            already_indexed_count=progress_already_indexed,
+            channel_indexed_count=len(indexed_before_for_batch),
+            total_unindexed_count=total_missing_before_limit,
+            remaining_count=len(missing_videos),
+            phase="transcripts",
+        )
 
         counters = {"processed": 0, "newly_indexed": 0, "chunks": 0, "cached": 0, "youtube": 0, "failed": 0}
 
@@ -1028,7 +1125,10 @@ def _run_index_job(job_id: str, channel_id: str, requested_video_id: str | None)
         else:
             batch = {"blocked": False, "cancelled": False, "failed_video_count": 0}
 
-        indexed_after = get_indexed_video_ids(channel_id, [v["video_id"] for v in videos])
+        indexed_after_all = get_indexed_video_ids(channel_id, [v["video_id"] for v in all_videos])
+        indexed_after_batch = get_indexed_video_ids(channel_id, [v["video_id"] for v in videos]) if videos else set()
+        selected_new_indexed_count = len(indexed_after_all & selected_new_ids)
+        remaining_after = max(0, total_missing_before_limit - selected_new_indexed_count)
         if batch.get("blocked"):
             final_state, severity = "blocked", "warning"
             message = "YouTube blocked additional transcript requests. Completed work was preserved."
@@ -1037,8 +1137,33 @@ def _run_index_job(job_id: str, channel_id: str, requested_video_id: str | None)
             message = "Indexing stopped. Completed transcripts and Chroma chunks were preserved; run indexing again to resume missing videos."
         else:
             final_state, severity = "completed", "success"
-            message = f"Indexing complete: {len(indexed_after)} of {len(videos)} selected videos are indexed."
-        _job_update(job_id, state=final_state, phase="done", severity=severity, message=message, indexed_video_count=len(indexed_after), failed_video_count=counters["failed"], remaining_count=max(0, len(videos)-len(indexed_after)), finished_at=datetime.now(timezone.utc).isoformat())
+            if requested_video_id:
+                message = "Selected video is indexed." if indexed_after_batch else "Selected video could not be indexed."
+            elif requires_rebuild:
+                message = (
+                    f"RAG index rebuild complete: {len(indexed_after_batch)} video(s) are indexed. "
+                    f"{remaining_after} cached unindexed video(s) remain."
+                )
+            elif not videos:
+                message = "All cached channel videos are already indexed in Chroma."
+            else:
+                message = (
+                    f"Indexed {selected_new_indexed_count} video(s) in this batch. "
+                    f"{remaining_after} cached unindexed video(s) remain."
+                )
+        _job_update(
+            job_id,
+            state=final_state,
+            phase="done",
+            severity=severity,
+            message=message,
+            indexed_video_count=len(indexed_after_batch),
+            channel_indexed_count=len(indexed_after_all),
+            newly_selected_indexed_count=selected_new_indexed_count,
+            failed_video_count=counters["failed"],
+            remaining_count=remaining_after,
+            finished_at=datetime.now(timezone.utc).isoformat(),
+        )
     except Exception as error:
         _job_update(job_id, state="failed", phase="done", severity="warning", message=f"Indexing failed: {error}", error=str(error), finished_at=datetime.now(timezone.utc).isoformat())
 
@@ -1131,12 +1256,34 @@ def index_rag_content(request: RagIndexRequest):
     if result is None:
         raise HTTPException(status_code=404, detail="YouTube channel was not found.")
 
-    videos = select_rag_videos(result["videos"])
-    if request.video_id:
-        requested_video_id = request.video_id.strip()
-        videos = [video for video in result["videos"] if str(video.get("video_id")) == requested_video_id]
-        if not videos:
-            raise HTTPException(status_code=404, detail="Requested video was not found in this channel.")
+    all_videos = _videos_newest_first(result["videos"])
+
+    if RAG_TEST_MODE:
+        videos = select_rag_videos(all_videos)
+        if request.video_id:
+            requested_video_id = request.video_id.strip()
+            videos = [video for video in all_videos if str(video.get("video_id")) == requested_video_id]
+            if not videos:
+                raise HTTPException(status_code=404, detail="Requested video was not found in this channel.")
+    else:
+        if request.video_id:
+            requested_video_id = request.video_id.strip()
+            requested_videos = [
+                video
+                for video in all_videos
+                if str(video.get("video_id")) == requested_video_id
+            ]
+            if not requested_videos:
+                raise HTTPException(status_code=404, detail="Requested video was not found in this channel.")
+            selected_missing, indexed_before, total_missing_before_limit = (
+                select_next_unindexed_rag_videos(channel_id, requested_videos)
+            )
+            videos = requested_videos
+        else:
+            selected_missing, indexed_before, total_missing_before_limit = (
+                select_next_unindexed_rag_videos(channel_id, all_videos)
+            )
+            videos = selected_missing
 
     if RAG_TEST_MODE:
         rag_channel_id = f"test::{channel_id}"
@@ -1185,12 +1332,11 @@ def index_rag_content(request: RagIndexRequest):
         # previously indexed video during the rebuild even when the current
         # RAG_TRANSCRIPT_VIDEO_LIMIT is smaller than the old index.
         if channel_requires_embedding_rebuild(channel_id):
-            all_videos = result["videos"]
             previous_indexed_ids = get_indexed_video_ids(
                 channel_id,
                 [video["video_id"] for video in all_videos],
             )
-            selected_ids = {str(video["video_id"]) for video in videos}
+            selected_ids = {str(video["video_id"]) for video in selected_missing}
             rebuild_ids = previous_indexed_ids | selected_ids
             rebuild_videos = [
                 video for video in all_videos
@@ -1217,10 +1363,16 @@ def index_rag_content(request: RagIndexRequest):
         # publication-date/language metadata without re-embedding their chunks.
         enrich_indexed_video_metadata(
             channel_id,
-            videos,
+            all_videos,
             channel_title=result["channel"].get("title"),
         )
-        missing_videos, indexed_before = get_missing_rag_videos(channel_id, videos)
+
+        if rebuilt_for_embedding_model:
+            missing_videos, indexed_before = get_missing_rag_videos(channel_id, videos)
+        elif request.video_id:
+            missing_videos = selected_missing
+        else:
+            missing_videos = selected_missing
     except RuntimeError as error:
         raise HTTPException(status_code=500, detail=str(error))
 
@@ -1250,6 +1402,10 @@ def index_rag_content(request: RagIndexRequest):
             channel_id,
             [video["video_id"] for video in videos],
         )
+        indexed_after_all = get_indexed_video_ids(
+            channel_id,
+            [video["video_id"] for video in all_videos],
+        )
     except (RuntimeError, ValueError) as error:
         raise HTTPException(status_code=500, detail=str(error))
 
@@ -1267,6 +1423,8 @@ def index_rag_content(request: RagIndexRequest):
         "rebuilt_for_embedding_model": rebuilt_for_embedding_model,
         "requested_video_count": len(videos),
         "indexed_video_count": len(indexed_after),
+        "channel_indexed_video_count": len(indexed_after_all),
+        "total_unindexed_video_count_before_limit": total_missing_before_limit,
         "missing_video_count_before_request": len(missing_videos),
         "new_transcript_count": len(new_transcripts),
         "newly_indexed_video_count": index_summary["indexed_video_count"],
@@ -1281,6 +1439,48 @@ def index_rag_content(request: RagIndexRequest):
             "blocked_video_id": transcript_batch.get("blocked_video_id"),
         },
         "transcript_status": transcript_status,
+    }
+
+
+@app.post("/api/channel/{channel_id}/summary")
+def channel_summary(channel_id: str):
+    """Generate a Chroma-only summary across all indexed videos for a channel."""
+    clean_channel_id = str(channel_id or "").strip()
+    if not clean_channel_id:
+        raise HTTPException(status_code=400, detail="Channel ID is required.")
+
+    rag_channel_id = f"test::{clean_channel_id}" if RAG_TEST_MODE else clean_channel_id
+    try:
+        stats = get_rag_storage_stats(rag_channel_id)
+    except RuntimeError as error:
+        raise HTTPException(status_code=500, detail=str(error))
+
+    if int(stats.get("chunk_count", 0)) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No transcript content is indexed for this channel yet. Use 'Index RAG Content' first.",
+        )
+
+    if channel_requires_embedding_rebuild(rag_channel_id):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The channel's Chroma index was created with a different embedding model. "
+                "Rebuild the RAG index before generating a channel summary."
+            ),
+        )
+
+    try:
+        result = summarize_channel(rag_channel_id)
+    except (RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=500, detail=str(error))
+
+    return {
+        **result,
+        "channel_id": clean_channel_id,
+        "rag_storage": "chroma",
+        "rag_test_mode": RAG_TEST_MODE,
+        "transcript_request_made": False,
     }
 
 
@@ -1330,6 +1530,86 @@ def ask_question(request: QuestionRequest):
         if identity_result is not None:
             return identity_result
 
+    # Ranked list requests such as "What are the 10 most recent videos?" are
+    # pure channel-metadata questions unless the user explicitly asks for a
+    # comparison. They must use the full cached/analyzed video list rather than
+    # only videos that happen to be indexed in Chroma. This also lets metadata
+    # lists work when the channel has no RAG index yet.
+    comparison_intent = _is_comparison_question(question)
+    ranked_request = None if RAG_TEST_MODE else _ranked_video_list_request(question)
+    if ranked_request and cached_videos and not comparison_intent:
+        requested_count, rank_mode = ranked_request
+        ranked_videos = _sort_ranked_videos(cached_videos, rank_mode)
+        selected = ranked_videos[:requested_count]
+
+        labels = {
+            "latest": "most recent",
+            "oldest": "oldest",
+            "longest": "longest",
+            "shortest": "shortest",
+        }
+        label = labels.get(rank_mode, rank_mode)
+        lines = [
+            f"{index}. {str(video.get('title') or video.get('video_id') or 'Untitled video')}"
+            for index, video in enumerate(selected, start=1)
+        ]
+        answer = f"Top {len(selected)} {label} video titles:\n" + "\n".join(lines)
+        if len(selected) < requested_count:
+            answer += (
+                f"\n\nOnly {len(selected)} cached channel video(s) are currently available "
+                f"out of the {requested_count} requested."
+            )
+
+        sources = [
+            {
+                "video_id": str(video.get("video_id") or ""),
+                "title": str(video.get("title") or video.get("video_id") or "Untitled video"),
+                "video_url": f"https://www.youtube.com/watch?v={str(video.get('video_id') or '')}",
+                "published_at": video.get("published_at"),
+                "duration_seconds": video.get("duration_seconds"),
+                "language": video.get("default_audio_language") or video.get("default_language"),
+                "start_time": None,
+                "end_time": None,
+            }
+            for video in selected
+        ]
+        selected_ids = [str(video.get("video_id") or "") for video in selected]
+
+        # Preserve the ordered result so follow-ups such as "What is the third
+        # one about?" can resolve the correct video before checking Chroma.
+        with _CHAT_LOCK:
+            active = _CHAT_SESSIONS.get(session_id)
+            if active is not None:
+                active["messages"].extend([
+                    {"role": "user", "content": question},
+                    {"role": "assistant", "content": answer},
+                ])
+                active["messages"] = active["messages"][-_MAX_CHAT_MESSAGES:]
+                active["target_video_ids"] = selected_ids
+                active["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+        return {
+            "answer": answer,
+            "sources": sources,
+            "retrieved_chunk_count": 0,
+            "mode": "metadata_list",
+            "indexed_video_count": indexed_video_count,
+            "rag_storage": "chroma",
+            "rag_test_mode": RAG_TEST_MODE,
+            "query_scope": f"{rank_mode}_video_list",
+            "matched_video_titles": [str(video.get("title") or "") for video in selected],
+            "answer_language": request.answer_language,
+            "session_id": session_id,
+            "transcript_source": "cached_channel_metadata",
+            "transcript_status": {
+                "severity": "success",
+                "message": (
+                    f"Answered from cached channel metadata for {len(selected)} video(s). "
+                    "RAG indexing was not required."
+                ),
+            },
+        }
+
     if int(stats.get("chunk_count", 0)) == 0:
         return {"answer": "No transcript content has been indexed for this channel yet. Use 'Index RAG Content' first.", "sources": [], "retrieved_chunk_count": 0, "mode": "no_indexed_content", "indexed_video_count": 0, "rag_storage": "chroma", "rag_test_mode": RAG_TEST_MODE, "query_scope": "channel", "session_id": session_id, "transcript_status": {"severity": "info", "message": "No RAG transcript content is indexed yet."}}
     if channel_requires_embedding_rebuild(rag_channel_id):
@@ -1339,29 +1619,20 @@ def ask_question(request: QuestionRequest):
     query_scope = "channel"
     matched_titles: list[str] = []
 
-    # Ranked list questions such as "top 5 most recent video titles" are
-    # metadata questions. Transcript chunks normally do not contain upload
-    # order or the complete video-title list, so answer these directly from
-    # the cached YouTube metadata limited to videos that are actually indexed
-    # in Chroma. This keeps the answer aligned with the current RAG database.
-    comparison_intent = _is_comparison_question(question)
-    ranked_request = None if RAG_TEST_MODE else _ranked_video_list_request(question)
+    # Ranked comparison questions use the full cached channel metadata to pick
+    # the requested videos first. The normal RAG scope check below then reports
+    # any selected videos that still need to be indexed.
     ranked_comparison_ids: list[str] = []
     ranked_comparison_titles: list[str] = []
     ranked_comparison_scope = ""
-    if ranked_request and cached_videos:
+    if ranked_request and cached_videos and comparison_intent:
         requested_count, rank_mode = ranked_request
-        indexed_ids = get_indexed_video_ids(rag_channel_id)
-        indexed_videos = [
-            video for video in cached_videos
-            if str(video.get("video_id") or "") in indexed_ids
-        ]
-        ranked_videos = _sort_ranked_videos(indexed_videos, rank_mode)
+        ranked_videos = _sort_ranked_videos(cached_videos, rank_mode)
         selected = ranked_videos[:requested_count]
 
         if not selected:
             return {
-                "answer": "No indexed videos are available for that metadata query yet.",
+                "answer": "No cached channel videos are available for that metadata query yet.",
                 "sources": [],
                 "retrieved_chunk_count": 0,
                 "mode": "metadata_list",
@@ -1376,78 +1647,10 @@ def ask_question(request: QuestionRequest):
                 },
             }
 
-        if comparison_intent:
-            ranked_comparison_ids = [str(video.get("video_id") or "") for video in selected]
-            ranked_comparison_titles = [str(video.get("title") or "") for video in selected]
-            ranked_comparison_scope = f"{rank_mode}_video_comparison"
-        else:
-            labels = {
-                "latest": "most recent",
-                "oldest": "oldest",
-                "longest": "longest",
-                "shortest": "shortest",
-            }
-            label = labels.get(rank_mode, rank_mode)
-            lines = [
-                f"{index}. {str(video.get('title') or video.get('video_id') or 'Untitled video')}"
-                for index, video in enumerate(selected, start=1)
-            ]
-            answer = f"Top {len(selected)} {label} indexed video titles:\n" + "\n".join(lines)
-            if len(selected) < requested_count:
-                answer += (
-                    f"\n\nOnly {len(selected)} indexed video(s) are currently available "
-                    f"out of the {requested_count} requested."
-                )
-    
-            sources = [
-                {
-                    "video_id": str(video.get("video_id") or ""),
-                    "title": str(video.get("title") or video.get("video_id") or "Untitled video"),
-                    "video_url": f"https://www.youtube.com/watch?v={str(video.get('video_id') or '')}",
-                    "published_at": video.get("published_at"),
-                    "duration_seconds": video.get("duration_seconds"),
-                    "language": video.get("default_audio_language") or video.get("default_language"),
-                    "start_time": None,
-                    "end_time": None,
-                }
-                for video in selected
-            ]
-            selected_ids = [str(video.get("video_id") or "") for video in selected]
-    
-            # Preserve the ordered list in the in-memory chat session so a follow-up
-            # like "What is the second one about?" can resolve to the correct video.
-            with _CHAT_LOCK:
-                active = _CHAT_SESSIONS.get(session_id)
-                if active is not None:
-                    active["messages"].extend([
-                        {"role": "user", "content": question},
-                        {"role": "assistant", "content": answer},
-                    ])
-                    active["messages"] = active["messages"][-_MAX_CHAT_MESSAGES:]
-                    active["target_video_ids"] = selected_ids
-                    active["updated_at"] = datetime.now(timezone.utc).isoformat()
-    
-            return {
-                "answer": answer,
-                "sources": sources,
-                "retrieved_chunk_count": 0,
-                "mode": "metadata_list",
-                "indexed_video_count": indexed_video_count,
-                "rag_storage": "chroma",
-                "rag_test_mode": RAG_TEST_MODE,
-                "query_scope": f"{rank_mode}_video_list",
-                "matched_video_titles": [str(video.get("title") or "") for video in selected],
-                "answer_language": request.answer_language,
-                "session_id": session_id,
-                "transcript_source": "indexed_video_metadata",
-                "transcript_status": {
-                    "severity": "success",
-                    "message": (
-                        f"Answered from metadata for {len(selected)} indexed video(s). "
-                        "No transcript retrieval was needed."
-                    ),
-                },
-            }
+        ranked_comparison_ids = [str(video.get("video_id") or "") for video in selected]
+        ranked_comparison_titles = [str(video.get("title") or "") for video in selected]
+        ranked_comparison_scope = f"{rank_mode}_video_comparison"
+
     if request.video_id:
         target_video_ids = [request.video_id.strip()]
         query_scope = "selected_video"
