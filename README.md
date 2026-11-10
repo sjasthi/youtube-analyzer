@@ -163,7 +163,6 @@
 - Metadata list fix: Chatbot couldn't answer questions such as "what are the 10 most recent videos?" Now it uses the analyzed video list to get the information
 - Gemini reliability improvements: Added Gemini 3.8 flash -> Gemini 3.5 Flash-lite as a fallback
 - Fallback testing: Added mocked offline unit tests to verify retry, fallback, recovery, error handling, and safety behavior without making live Gemini API calls. "test/test_llm_fallback.py"
-<b>FP8</b>
 - Added a Clear button to the Channel RAG Chatbot to clear the question input
 - Added a Copy Transcript button to the Cached Transcript Viewer
 - Added tooltips to the Transcript and RAG columns in Recent Videos
