@@ -362,6 +362,7 @@ function displayVideos(videos) {
         currentVideos.forEach(video => {
             const row = document.createElement("tr");
             row.dataset.videoId = video.video_id;
+            row.dataset.videoTitle = video.title || "Untitled";
             const videoUrl = `https://www.youtube.com/watch?v=${video.video_id}`;
 
             const thumbnailCell = document.createElement("td");
@@ -552,6 +553,7 @@ function updateVideoStatusRows(statuses) {
                 viewButton.type = "button";
                 viewButton.className = "view-transcript-button compact-button";
                 viewButton.dataset.videoId = row.dataset.videoId;
+                viewButton.dataset.videoTitle = row.dataset.videoTitle;
                 viewButton.textContent = "View Transcript";
                 
                 transcriptCell.appendChild(viewButton);
@@ -1056,13 +1058,15 @@ function formatTranscriptSegmentTime(totalSeconds) {
 
 
 // Loads and displays a specific video's cached transcript in the modal
-async function viewVideoTranscript(videoId) {
+async function viewVideoTranscript(videoId, videoTitle) {
+    const transcriptModalVideoTitle = document.getElementById("transcriptModalVideoTitle");
     const transcriptModal = document.getElementById("transcriptModal");
     const transcriptModalMeta = document.getElementById("transcriptModalMeta");
 
     transcriptModal.classList.remove("hidden");
     document.body.classList.add("modal-open");
     transcriptModalMeta.textContent = "";
+    transcriptModalVideoTitle.textContent = videoTitle || "Untitled Video";
     transcriptModalText.textContent = "Loading cached transcript...";
     copyTranscriptModalButton.disabled = true;
 
@@ -1130,7 +1134,10 @@ videoTableBody.addEventListener("click", event => {
 
     const viewButton = event.target.closest(".view-transcript-button");
     if (viewButton) {
-        viewVideoTranscript(viewButton.dataset.videoId);
+        viewVideoTranscript(
+            viewButton.dataset.videoId,
+            viewButton.dataset.videoTitle
+        );
     }
 });
 
