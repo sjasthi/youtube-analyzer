@@ -459,13 +459,6 @@ html.dark-mode table.dataTable tbody tr:hover > * {
     transform: translateY(3px) rotate(45deg);
 }
 
-/* Header controls */
-.header-controls {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
 /* Text size buttons */
 .text-size-controls {
     display: flex;
@@ -526,43 +519,6 @@ html.dark-mode table.dataTable tbody tr:hover > * {
 .toggle-icon {
     font-size: 1.2em;
     padding-left: 10px;
-}
-
-/* Cache-only transcript viewer. */
-.transcript-viewer-controls {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    margin-bottom: 12px;
-}
-
-#transcriptVideoSelect {
-    flex: 1;
-    min-width: 0;
-}
-
-.transcript-viewer-meta {
-    margin: 10px 0;
-    font-size: 0.9rem;
-}
-
-.transcript-viewer-text {
-    margin: 0;
-    padding: 16px;
-    max-height: 420px;
-    overflow: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-    background: var(--surface-secondary);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-family: Arial, sans-serif;
-    line-height: 1.55;
-}
-
-@media (max-width: 650px) {
-    .transcript-viewer-controls { flex-direction: column; align-items: stretch; }
 }
 
 /* Thumbnail appearance in analytics sections */
@@ -682,6 +638,52 @@ body.modal-open { overflow: hidden; }
     min-width: 42px;
     padding: 4px 10px;
 }
+
+/* Cached transcript modal */
+.transcript-modal-dialog {
+    width: min(920px, 96vw);
+}
+
+.transcript-viewer-meta {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.transcript-viewer-text {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 280px;
+    max-height: 55vh;
+    overflow-y: auto;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    padding: 14px;
+    margin: 0;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-secondary);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+.transcript-viewer-controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* View Transcript button in the Videos section */
+.view-transcript-button {
+    display: block;
+    margin-top: 6px;
+}
+
 .chat-messages {
     width: 100%;
     min-width: 0;
@@ -760,6 +762,16 @@ body.modal-open { overflow: hidden; }
     .chat-dialog { max-height: 94vh; padding: 14px; }
     .chat-messages { min-height: 220px; }
     .chat-bubble { max-width: 95%; }
+    
+    .transcript-modal-dialog {
+        max-height: 94vh;
+        padding: 14px;
+    }
+
+    .transcript-viewer-text {
+        min-height: 220px;
+        max-height: 55vh;
+    }
 }
 
 .chat-copy-button {

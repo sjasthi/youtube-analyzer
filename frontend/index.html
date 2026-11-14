@@ -184,26 +184,6 @@
             </div>
         </section>
 
-        <!-- Cache-only transcript viewer. Opening this never contacts YouTube. -->
-        <section id="transcriptViewerSection" class="card hidden">
-            <button type="button" class="section-toggle" aria-expanded="true" aria-controls="transcriptViewerContent">
-                <span>Cached Transcript Viewer</span>
-                <span class="toggle-icon" aria-hidden="true">−</span>
-            </button>
-            <div id="transcriptViewerContent" class="collapsible-content">
-                <p class="note">View transcripts already saved in SQLite. This viewer does not request new transcripts from YouTube.</p>
-                <div class="transcript-viewer-controls">
-                    <select id="transcriptVideoSelect" aria-label="Choose cached transcript">
-                        <option value="">No cached transcripts loaded</option>
-                    </select>
-                    <button id="loadTranscriptButton" type="button" disabled>View Transcript</button>
-                    <button id="copyTranscriptButton" type="button" disabled>Copy Transcript</button>
-                </div>
-                <div id="transcriptViewerMeta" class="transcript-viewer-meta muted"></div>
-                <pre id="transcriptViewerText" class="transcript-viewer-text">Select a cached transcript to view it here.</pre>
-            </div>
-        </section>
-
         <!-- Recent-video table. JavaScript creates the table rows. -->
         <section id="videosSection" class="card hidden">
             <button type="button" class="section-toggle" aria-expanded="true" aria-controls="videosContent">
@@ -282,6 +262,32 @@
         <button id = "backToTopButton" type = "button" aria-label = "Back to top" title = "Back to top">
             <span class = "arrow-up"></span>
         </button>
+
+        <!-- Modal for viewing a cached transcript from the Videos section -->
+        <div id = "transcriptModal" class = "chat-modal hidden" role = "dialog"
+            aria-modal = "true" aria-labelledby = "transcriptModalTitle">
+            <div class = "chat-dialog transcript-modal-dialog">
+                <div class = "chat-header">
+                    <h2 id = "transcriptModalTitle">Cached Transcript</h2>
+                    <button type = "button" id = "closeTranscriptModal"
+                        class = "chat-close" aria-label = "Close transcript">
+                        &times;
+                    </button>
+                </div>
+
+                <p id = "transcriptModalMeta" class = "transcript-viewer-meta"></p>
+                <pre id = "transcriptModalText" class = "transcript-viewer-text"></pre>
+
+                <div class = "transcript-viewer-controls">
+                    <button type = "button" id = "copyTranscriptModalButton"
+                        disabled>Copy Transcript
+                    </button>
+                    <button type = "button" id = "closeTranscriptModalButton">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
     </main>
     <!-- Allows us to use jQuery from the internet -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>

@@ -71,13 +71,9 @@ const channelSummaryResult = document.getElementById("channelSummaryResult");
 const channelSummaryText = document.getElementById("channelSummaryText");
 const channelSummarySourceList = document.getElementById("channelSummarySourceList");
 
-// Cache-only transcript viewer elements.
-const transcriptViewerSection = document.getElementById("transcriptViewerSection");
-const transcriptVideoSelect = document.getElementById("transcriptVideoSelect");
-const loadTranscriptButton = document.getElementById("loadTranscriptButton");
-const transcriptViewerMeta = document.getElementById("transcriptViewerMeta");
-const transcriptViewerText = document.getElementById("transcriptViewerText");
-const copyTranscriptButton = document.getElementById("copyTranscriptButton");
+// Transcript modal elements
+const copyTranscriptModalButton = document.getElementById("copyTranscriptModalButton");
+const transcriptModalText = document.getElementById("transcriptModalText");
 
 // Store the current Chart.js object so it can be replaced on the next search.
 let uploadTrendChart = null;
@@ -332,6 +328,7 @@ function videoTypeLabel(video) {
     return seconds > 0 && seconds <= 180 ? "Short-form candidate" : "Regular / unknown";
 }
 
+
 function makeStatusBadge(kind, label, className, tooltip = "") {
     const badge = document.createElement("span");
     badge.className = `status-badge ${className}`;
@@ -344,6 +341,7 @@ function makeStatusBadge(kind, label, className, tooltip = "") {
 
     return badge;
 }
+
 
 function displayVideos(videos) {
     currentVideos = videos || [];
@@ -524,6 +522,7 @@ function displayVideos(videos) {
     videosSection.classList.remove("hidden");
 }
 
+
 function updateVideoStatusRows(statuses) {
     const byId = new Map((statuses || []).map(item => [String(item.video_id), item]));
     const nodes = videoDataTable ? videoDataTable.rows().nodes().toArray() : Array.from(videoTableBody.querySelectorAll("tr"));
@@ -548,6 +547,15 @@ function updateVideoStatusRows(statuses) {
                     transcriptTooltip
                 )
             );
+            if (status.transcript_cached) {
+                const viewButton = document.createElement("button");
+                viewButton.type = "button";
+                viewButton.className = "view-transcript-button compact-button";
+                viewButton.dataset.videoId = row.dataset.videoId;
+                viewButton.textContent = "View Transcript";
+                
+                transcriptCell.appendChild(viewButton);
+            }
         }
         if (ragCell) {
             ragCell.innerHTML = "";
@@ -581,6 +589,7 @@ function updateVideoStatusRows(statuses) {
     });
 }
 
+
 async function refreshVideoStatuses() {
     if (!activeChannelId) return;
     try {
@@ -591,6 +600,7 @@ async function refreshVideoStatuses() {
         console.warn("Unable to refresh video pipeline statuses:", error);
     }
 }
+
 
 function startVideoStatusPolling() {
     if (videoStatusPoller) clearInterval(videoStatusPoller);
@@ -626,12 +636,6 @@ async function analyzeChannel() {
     channelSummarySourceList.innerHTML = "";
     channelSummaryStatus.textContent = "Index RAG content first, then generate a channel-wide summary.";
     copyChannelSummaryButton.classList.add("hidden");
-    transcriptViewerSection.classList.add("hidden");
-    transcriptVideoSelect.innerHTML = '<option value="">No cached transcripts loaded</option>';
-    copyTranscriptButton.disabled = true;
-    loadTranscriptButton.disabled = true;
-    transcriptViewerMeta.textContent = "";
-    transcriptViewerText.textContent = "Select a cached transcript to view it here.";
     transcriptStatus.textContent = "";
     transcriptStatus.className = "transcript-status hidden";
 
@@ -686,9 +690,7 @@ async function analyzeChannel() {
         // transcripts.
         questionSection.classList.remove("hidden");
         channelSummarySection.classList.remove("hidden");
-        transcriptViewerSection.classList.remove("hidden");
         await refreshRagCoverage();
-        await refreshTranscriptViewer();
         startVideoStatusPolling();
 
     } catch (error) {
@@ -700,6 +702,7 @@ async function analyzeChannel() {
         analyzeButton.disabled = false;
     }
 }
+
 
 // Show how much RAG content is already stored for the active channel.
 async function refreshRagCoverage() {
@@ -775,9 +778,11 @@ async function startIndexJob(videoId = null) {
     }
 }
 
+
 async function indexRagContent() {
     return startIndexJob(null);
 }
+
 
 async function pollIndexJob() {
     if (!activeIndexJobId) return;
@@ -810,7 +815,6 @@ async function pollIndexJob() {
             channelSummaryText.textContent = "";
             channelSummarySourceList.innerHTML = "";
             copyChannelSummaryButton.classList.add("hidden");
-            await refreshTranscriptViewer();
             await refreshRagCoverage();
             await refreshVideoStatuses();
         }
@@ -818,6 +822,7 @@ async function pollIndexJob() {
         console.warn("Unable to poll indexing job:", error);
     }
 }
+
 
 async function cancelIndexing() {
     if (!activeIndexJobId) return;
@@ -926,6 +931,7 @@ function appendChatBubble(role, text, sources = []) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+
 async function askQuestion() {
     const question = questionInput.value.trim();
     if (question === "") return;
@@ -1029,6 +1035,7 @@ async function generateChannelSummary() {
     }
 }
 
+
 async function copyChannelSummary() {
     const text = channelSummaryText.textContent.trim();
     if (!text) return;
@@ -1042,137 +1049,89 @@ async function copyChannelSummary() {
     }
 }
 
-// Load the list of transcripts that already exist in SQLite. This endpoint is
-// cache-only and will never trigger youtube-transcript-api.
-async function refreshTranscriptViewer() {
-    if (!activeChannelId) return;
-
-    try {
-        const response = await fetch(
-            `/api/channel/${encodeURIComponent(activeChannelId)}/cached-transcripts`
-        );
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Unable to read cached transcripts.");
-
-        transcriptVideoSelect.innerHTML = "";
-        const transcripts = data.transcripts || [];
-
-        if (transcripts.length === 0) {
-            transcriptVideoSelect.innerHTML = '<option value="">No cached transcripts yet</option>';
-            loadTranscriptButton.disabled = true;
-            copyTranscriptButton.disabled = true;
-            transcriptViewerMeta.textContent = "";
-            transcriptViewerText.textContent = "Index RAG content or run youtube_transcriptor.py to create cached transcripts.";
-            return;
-        }
-
-        const placeholder = document.createElement("option");
-        placeholder.value = "";
-        placeholder.textContent = `Choose a transcript (${transcripts.length} cached)`;
-        transcriptVideoSelect.appendChild(placeholder);
-
-        transcripts.forEach(item => {
-            const option = document.createElement("option");
-            option.value = item.video_id;
-            const language = item.language ? ` [${item.language}]` : "";
-            option.textContent = `${item.title}${language}`;
-            transcriptVideoSelect.appendChild(option);
-        });
-
-        loadTranscriptButton.disabled = false;
-        transcriptViewerMeta.textContent = `${transcripts.length} transcript${transcripts.length === 1 ? "" : "s"} available in SQLite.`;
-        transcriptViewerText.textContent = "Select a cached transcript to view it here.";
-    } catch (error) {
-        loadTranscriptButton.disabled = true;
-        copyTranscriptButton.disabled = true;
-        transcriptViewerMeta.textContent = `Unable to load cached transcripts: ${error.message}`;
-    }
-}
 
 function formatTranscriptSegmentTime(totalSeconds) {
     return formatDuration(Number(totalSeconds || 0));
 }
 
-async function viewSelectedTranscript() {
-    const videoId = transcriptVideoSelect.value;
-    if (!videoId) {
-        transcriptViewerText.textContent = "Choose a cached transcript first.";
-        return;
-    }
 
-    loadTranscriptButton.disabled = true;
-    copyTranscriptButton.disabled = true;
-    transcriptViewerText.textContent = "Loading cached transcript...";
+// Loads and displays a specific video's cached transcript in the modal
+async function viewVideoTranscript(videoId) {
+    const transcriptModal = document.getElementById("transcriptModal");
+    const transcriptModalMeta = document.getElementById("transcriptModalMeta");
+
+    transcriptModal.classList.remove("hidden");
+    document.body.classList.add("modal-open");
+    transcriptModalMeta.textContent = "";
+    transcriptModalText.textContent = "Loading cached transcript...";
+    copyTranscriptModalButton.disabled = true;
 
     try {
-        const response = await fetch(`/api/transcript/${encodeURIComponent(videoId)}`);
+        const response = await fetch(
+            `/api/transcript/${encodeURIComponent(videoId)}`
+        );
         const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Unable to load transcript.");
+
+        if (!response.ok) {
+            throw new Error(data.detail || "Unable to load transcript.");
+        }
 
         const meta = [];
+
         if (data.language) meta.push(`Language: ${data.language}`);
         if (data.published_at) meta.push(`Published: ${formatDate(data.published_at)}`);
         if (data.duration_seconds !== null && data.duration_seconds !== undefined) {
             meta.push(`Duration: ${formatDuration(data.duration_seconds)}`);
         }
-        meta.push(data.has_timestamps ? "Timestamps: available" : "Timestamps: unavailable (legacy cached transcript)");
-        transcriptViewerMeta.textContent = meta.join(" • ");
+
+        meta.push(
+            data.has_timestamps
+                ? "Timestamps: available"
+                : "Timestamps: unavailable (legacy cached transcript)"
+        );
+
+        transcriptModalMeta.textContent = meta.join(" • ");
 
         if (data.segments && data.segments.length > 0) {
-            transcriptViewerText.textContent = data.segments
+            transcriptModalText.textContent = data.segments
                 .map(segment => {
                     const start = formatTranscriptSegmentTime(segment.start);
                     const endValue = segment.end !== undefined && segment.end !== null
                         ? segment.end
                         : Number(segment.start || 0) + Number(segment.duration || 0);
                     const end = formatTranscriptSegmentTime(endValue);
+
                     return `[${start}–${end}] ${segment.text || ""}`;
                 })
                 .join("\n");
         } else {
-            transcriptViewerText.textContent = data.transcript || "This cached transcript is empty.";
+            transcriptModalText.textContent =
+                data.transcript || "This cached transcript is empty.";
         }
-        copyTranscriptButton.disabled = false;
+        copyTranscriptModalButton.disabled = false;
     } catch (error) {
-        transcriptViewerText.textContent = `Error: ${error.message}`;
-        copyTranscriptButton.disabled = true;
-    } finally {
-        loadTranscriptButton.disabled = false;
+        transcriptModalText.textContent = `Error: ${error.message}`;
     }
 }
 
 generateChannelSummaryButton.addEventListener("click", generateChannelSummary);
 copyChannelSummaryButton.addEventListener("click", copyChannelSummary);
 
-transcriptVideoSelect.addEventListener("change", () => {
-    if (transcriptVideoSelect.value) viewSelectedTranscript();
-});
-loadTranscriptButton.addEventListener("click", viewSelectedTranscript);
-
-// Copies the currently displayed transcript
-copyTranscriptButton.addEventListener("click", async () => {
-    const transcript = transcriptViewerText.innerText.trim();
-    if (!transcript) return;
-    try {
-        await navigator.clipboard.writeText(transcript);
-        copyTranscriptButton.textContent = "Copied!";
-
-        setTimeout(() => {
-            copyTranscriptButton.textContent = "Copy Transcript";
-        }, 2000);
-
-    } catch (error) {
-        copyTranscriptButton.textContent = "Copy failed";
-    }
-});
-
 // Index transcript content only when the user explicitly requests it.
 indexRagButton.addEventListener("click", indexRagContent);
 cancelIndexButton.addEventListener("click", cancelIndexing);
 
 videoTableBody.addEventListener("click", event => {
-    const button = event.target.closest(".index-video-button");
-    if (button) startIndexJob(button.dataset.videoId);
+    const indexButton = event.target.closest(".index-video-button");
+    if (indexButton) {
+        startIndexJob(indexButton.dataset.videoId);
+        return;
+    }
+
+    const viewButton = event.target.closest(".view-transcript-button");
+    if (viewButton) {
+        viewVideoTranscript(viewButton.dataset.videoId);
+    }
 });
 
 openChatButton.addEventListener("click", () => {
@@ -1190,6 +1149,50 @@ chatModal.addEventListener("click", event => {
 document.addEventListener("keydown", event => {
     if (event.key === "Escape" && !chatModal.classList.contains("hidden")) closeChatButton.click();
 });
+
+// Closes the transcript modal
+const transcriptModal = document.getElementById("transcriptModal");
+const closeTranscriptModal = document.getElementById("closeTranscriptModal");
+const closeTranscriptModalButton = document.getElementById("closeTranscriptModalButton");
+
+function closeTranscriptModalWindow() {
+    transcriptModal.classList.add("hidden");
+    document.body.classList.remove("modal-open");
+}
+
+closeTranscriptModal.addEventListener("click", closeTranscriptModalWindow);
+closeTranscriptModalButton.addEventListener("click", closeTranscriptModalWindow);
+
+transcriptModal.addEventListener("click", event => {
+    if (event.target === transcriptModal) {
+        closeTranscriptModalWindow();
+    }
+});
+
+// Closes the transcript modal with Escape
+document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && !transcriptModal.classList.contains("hidden")) {
+        closeTranscriptModalWindow();
+    }
+});
+
+// Copies the transcript in the modal
+copyTranscriptModalButton.addEventListener("click", async () => {
+    const transcript = transcriptModalText.innerText.trim();
+    if (!transcript) return;
+
+    try {
+        await navigator.clipboard.writeText(transcript);
+        copyTranscriptModalButton.textContent = "Copied!";
+
+        setTimeout(() => {
+            copyTranscriptModalButton.textContent = "Copy Transcript";
+        }, 2000);
+    } catch (error) {
+        copyTranscriptModalButton.textContent = "Copy failed";
+    }
+});
+
 
 // Asks the question when the button is clicked. This is Chroma-only and does
 // not retrieve missing transcripts.
