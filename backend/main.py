@@ -21,9 +21,12 @@ from backend.database_service import (
     get_saved_transcripts_for_channel,
     get_saved_transcript,
     get_saved_transcript_with_video,
+    get_saved_chat_session,
     initialize_database,
     is_cache_fresh,
     save_channel_and_videos,
+    save_chat_session,
+    delete_saved_chat_session,
 )
 
 from backend.youtube_service import get_all_videos, resolve_channel_id
@@ -549,11 +552,12 @@ def _answer_analytics_rank_query(
         if active is not None:
             active["messages"].extend([
                 {"role": "user", "content": question},
-                {"role": "assistant", "content": answer},
+                {"role": "assistant", "content": answer, "sources": sources},
             ])
             active["messages"] = active["messages"][-_MAX_CHAT_MESSAGES:]
             active["target_video_ids"] = selected_ids
             active["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _persist_chat_session(session_id)
 
     return {
         "answer": answer,
@@ -706,11 +710,12 @@ def _answer_video_identity_query(
         if active is not None:
             active["messages"].extend([
                 {"role": "user", "content": question},
-                {"role": "assistant", "content": answer},
+                {"role": "assistant", "content": answer, "sources": [source]},
             ])
             active["messages"] = active["messages"][-_MAX_CHAT_MESSAGES:]
             active["target_video_ids"] = [target_id]
             active["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _persist_chat_session(session_id)
 
     return {
         "answer": answer,
@@ -732,11 +737,33 @@ def _answer_video_identity_query(
     }
 
 
-# In-memory chat context. This intentionally disappears when FastAPI restarts.
+# Chat sessions are cached in memory and mirrored to SQLite so recent
+# conversation state survives page reloads and FastAPI restarts.
 _CHAT_SESSIONS: dict[str, dict] = {}
 _CHAT_LOCK = threading.Lock()
 _MAX_CHAT_SESSIONS = 100
-_MAX_CHAT_MESSAGES = 12
+_MAX_CHAT_MESSAGES = 50
+
+
+def _persist_chat_session(session_id: str) -> None:
+    """Write the current in-memory chat session to SQLite."""
+    with _CHAT_LOCK:
+        active = _CHAT_SESSIONS.get(session_id)
+        if active is None:
+            return
+        snapshot = {
+            "channel_id": str(active.get("channel_id") or ""),
+            "messages": list(active.get("messages") or []),
+            "target_video_ids": list(active.get("target_video_ids") or []),
+            "updated_at": str(active.get("updated_at") or datetime.now(timezone.utc).isoformat()),
+        }
+    save_chat_session(
+        session_id=session_id,
+        channel_id=snapshot["channel_id"],
+        messages=snapshot["messages"],
+        target_video_ids=snapshot["target_video_ids"],
+        updated_at=snapshot["updated_at"],
+    )
 
 # In-memory background indexing jobs. They are operational state, not project data.
 _INDEX_JOBS: dict[str, dict] = {}
@@ -1005,17 +1032,53 @@ def _looks_like_follow_up(question: str) -> bool:
 
 
 def _get_chat_session(session_id: str | None, channel_id: str) -> tuple[str, dict]:
+    """Load/create a chat session, restoring it from SQLite when necessary."""
     sid = str(session_id or "").strip() or str(uuid.uuid4())
+
     with _CHAT_LOCK:
-        if sid not in _CHAT_SESSIONS and len(_CHAT_SESSIONS) >= _MAX_CHAT_SESSIONS:
-            oldest = min(_CHAT_SESSIONS, key=lambda key: _CHAT_SESSIONS[key].get("updated_at", ""))
-            _CHAT_SESSIONS.pop(oldest, None)
-        session = _CHAT_SESSIONS.setdefault(sid, {"channel_id": channel_id, "messages": [], "target_video_ids": [], "updated_at": ""})
-        if session.get("channel_id") != channel_id:
-            session.clear()
-            session.update({"channel_id": channel_id, "messages": [], "target_video_ids": [], "updated_at": ""})
-        session["updated_at"] = datetime.now(timezone.utc).isoformat()
-        return sid, session
+        session = _CHAT_SESSIONS.get(sid)
+
+    if session is None:
+        saved = get_saved_chat_session(sid)
+        if saved is not None and saved.get("channel_id") == channel_id:
+            session = {
+                "channel_id": channel_id,
+                "messages": list(saved.get("messages") or [])[-_MAX_CHAT_MESSAGES:],
+                "target_video_ids": list(saved.get("target_video_ids") or []),
+                "updated_at": str(saved.get("updated_at") or ""),
+            }
+        else:
+            session = {
+                "channel_id": channel_id,
+                "messages": [],
+                "target_video_ids": [],
+                "updated_at": "",
+            }
+
+        with _CHAT_LOCK:
+            if len(_CHAT_SESSIONS) >= _MAX_CHAT_SESSIONS:
+                oldest = min(
+                    _CHAT_SESSIONS,
+                    key=lambda key: _CHAT_SESSIONS[key].get("updated_at", ""),
+                )
+                _CHAT_SESSIONS.pop(oldest, None)
+            _CHAT_SESSIONS[sid] = session
+
+    with _CHAT_LOCK:
+        active = _CHAT_SESSIONS[sid]
+        if active.get("channel_id") != channel_id:
+            active.clear()
+            active.update({
+                "channel_id": channel_id,
+                "messages": [],
+                "target_video_ids": [],
+                "updated_at": "",
+            })
+        active["updated_at"] = datetime.now(timezone.utc).isoformat()
+        result = active
+
+    _persist_chat_session(sid)
+    return sid, result
 
 
 def _job_update(job_id: str, **changes) -> None:
@@ -1219,10 +1282,33 @@ def video_pipeline_statuses(channel_id: str):
     return {"channel_id": channel_id, "videos": [{"video_id": vid, "transcript_cached": vid in cached_ids, "rag_indexed": vid in indexed_ids, "processing_phase": processing.get(vid)} for vid in video_ids]}
 
 
+@app.get("/api/chat/session/{session_id}")
+def get_chat_session_history(session_id: str, channel_id: str = Query(...)):
+    """Return persisted chat messages for the active channel/session."""
+    saved = get_saved_chat_session(session_id)
+    if saved is None or saved.get("channel_id") != channel_id:
+        return {
+            "status": "success",
+            "exists": False,
+            "session_id": session_id,
+            "channel_id": channel_id,
+            "messages": [],
+        }
+    return {
+        "status": "success",
+        "exists": True,
+        "session_id": session_id,
+        "channel_id": channel_id,
+        "messages": list(saved.get("messages") or []),
+        "updated_at": saved.get("updated_at"),
+    }
+
+
 @app.delete("/api/chat/session/{session_id}")
 def clear_chat_session(session_id: str):
     with _CHAT_LOCK:
         _CHAT_SESSIONS.pop(session_id, None)
+    delete_saved_chat_session(session_id)
     return {"status": "success"}
 
 
@@ -1582,11 +1668,12 @@ def ask_question(request: QuestionRequest):
             if active is not None:
                 active["messages"].extend([
                     {"role": "user", "content": question},
-                    {"role": "assistant", "content": answer},
+                    {"role": "assistant", "content": answer, "sources": sources},
                 ])
                 active["messages"] = active["messages"][-_MAX_CHAT_MESSAGES:]
                 active["target_video_ids"] = selected_ids
                 active["updated_at"] = datetime.now(timezone.utc).isoformat()
+        _persist_chat_session(session_id)
 
         return {
             "answer": answer,
@@ -1699,13 +1786,21 @@ def ask_question(request: QuestionRequest):
     with _CHAT_LOCK:
         active = _CHAT_SESSIONS.get(session_id)
         if active is not None:
-            active["messages"].extend([{"role": "user", "content": question}, {"role": "assistant", "content": str(rag_result.get("answer") or "")}])
+            active["messages"].extend([
+                {"role": "user", "content": question},
+                {
+                    "role": "assistant",
+                    "content": str(rag_result.get("answer") or ""),
+                    "sources": list(rag_result.get("sources") or []),
+                },
+            ])
             active["messages"] = active["messages"][-_MAX_CHAT_MESSAGES:]
             if target_video_ids:
                 active["target_video_ids"] = list(target_video_ids)
             elif source_ids:
                 active["target_video_ids"] = list(dict.fromkeys(source_ids))
             active["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _persist_chat_session(session_id)
 
     return {**rag_result, "indexed_video_count": indexed_video_count, "transcript_source": "chroma_only", "transcript_status": {"severity": "success", "message": f"RAG searched existing Chroma content across {len(target_video_ids) if target_video_ids else indexed_video_count} video scope item(s). No transcript request was made."}, "rag_storage": "chroma", "rag_test_mode": RAG_TEST_MODE, "query_scope": query_scope, "matched_video_titles": matched_titles, "answer_language": request.answer_language, "session_id": session_id}
 

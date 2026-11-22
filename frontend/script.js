@@ -87,8 +87,25 @@ let activeIndexJobId = null;
 let indexJobPoller = null;
 let videoStatusPoller = null;
 let currentVideos = [];
-let chatSessionId = sessionStorage.getItem("ragChatSessionId") || (crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}-${Math.random()}`);
-sessionStorage.setItem("ragChatSessionId", chatSessionId);
+let chatSessionId = null;
+
+function createChatSessionId() {
+    return crypto.randomUUID
+        ? crypto.randomUUID()
+        : `session-${Date.now()}-${Math.random()}`;
+}
+
+function chatSessionStorageKey(channelId) {
+    return `ragChatSessionId:${channelId}`;
+}
+
+function loadOrCreateChatSessionId(channelId) {
+    const key = chatSessionStorageKey(channelId);
+    const saved = localStorage.getItem(key);
+    const sessionId = saved || createChatSessionId();
+    localStorage.setItem(key, sessionId);
+    return sessionId;
+}
 
 // Returns true when the saved/active page theme is dark.
 function isDarkMode() {
@@ -622,8 +639,7 @@ async function analyzeChannel() {
     if (videoStatusPoller) { clearInterval(videoStatusPoller); videoStatusPoller = null; }
     if (indexJobPoller) { clearInterval(indexJobPoller); indexJobPoller = null; }
     activeIndexJobId = null;
-    chatSessionId = crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}-${Math.random()}`;
-    sessionStorage.setItem("ragChatSessionId", chatSessionId);
+    chatSessionId = null;
     chatMessages.innerHTML = '<div class="chat-bubble assistant">Ask a question about the indexed channel content.</div>';
     questionInput.value = "";
     askQuestionButton.disabled = true;
@@ -686,6 +702,8 @@ async function analyzeChannel() {
         
         // Remember the resolved channel so questions use the same analysis.
         activeChannelId = resolvedChannelId;
+        chatSessionId = loadOrCreateChatSessionId(activeChannelId);
+        await restoreChatHistory();
 
         // Shows the Q&A section after channel analysis. RAG indexing is a
         // separate user action, so channel analysis itself does not retrieve
@@ -934,6 +952,32 @@ function appendChatBubble(role, text, sources = []) {
 }
 
 
+async function restoreChatHistory() {
+    chatMessages.innerHTML = '<div class="chat-bubble assistant">Ask a question about the indexed channel content.</div>';
+    if (!activeChannelId || !chatSessionId) return;
+
+    try {
+        const response = await fetch(
+            `/api/chat/session/${encodeURIComponent(chatSessionId)}?channel_id=${encodeURIComponent(activeChannelId)}`
+        );
+        const data = await response.json();
+        if (!response.ok || !data.exists || !Array.isArray(data.messages) || data.messages.length === 0) return;
+
+        chatMessages.innerHTML = "";
+        data.messages.forEach(message => {
+            if (!message || !["user", "assistant"].includes(message.role)) return;
+            appendChatBubble(
+                message.role,
+                String(message.content || ""),
+                Array.isArray(message.sources) ? message.sources : []
+            );
+        });
+    } catch (error) {
+        console.warn("Unable to restore chat history:", error);
+    }
+}
+
+
 async function askQuestion() {
     const question = questionInput.value.trim();
     if (question === "") return;
@@ -964,7 +1008,9 @@ async function askQuestion() {
         if (!response.ok) throw new Error(data.detail || "Unable to get an answer.");
         if (data.session_id) {
             chatSessionId = data.session_id;
-            sessionStorage.setItem("ragChatSessionId", chatSessionId);
+            if (activeChannelId) {
+                localStorage.setItem(chatSessionStorageKey(activeChannelId), chatSessionId);
+            }
         }
         pending.remove();
         appendChatBubble("assistant", data.answer, data.sources || []);
@@ -1210,15 +1256,23 @@ questionInput.addEventListener("keydown", event => {
     if (event.key === "Enter") askQuestion();
 });
 
-// Starts a fresh non-persistent conversation in both the browser and Python memory.
+// Starts a fresh conversation and removes the previous persisted session.
 newChatButton.addEventListener("click", async () => {
     const oldSessionId = chatSessionId;
-    chatSessionId = crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}-${Math.random()}`;
-    sessionStorage.setItem("ragChatSessionId", chatSessionId);
+    chatSessionId = createChatSessionId();
+    if (activeChannelId) {
+        localStorage.setItem(chatSessionStorageKey(activeChannelId), chatSessionId);
+    }
     questionInput.value = "";
     chatMessages.innerHTML = '<div class="chat-bubble assistant">New chat started. Ask a question about the indexed channel content.</div>';
     askQuestionButton.disabled = true;
-    try { await fetch(`/api/chat/session/${encodeURIComponent(oldSessionId)}`, { method: "DELETE" }); } catch (error) { console.warn(error); }
+    if (oldSessionId) {
+        try {
+            await fetch(`/api/chat/session/${encodeURIComponent(oldSessionId)}`, { method: "DELETE" });
+        } catch (error) {
+            console.warn(error);
+        }
+    }
 });
 
 // Enables the Ask Question button when the user enters text

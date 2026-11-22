@@ -46,6 +46,7 @@ The application uses the YouTube Data API for channel and video information, SQL
 - Use Chroma for semantic retrieval.
 - Use Gemini for generated answers.
 - Show unique source video links for RAG answers.
+- Persist recent chatbot history in SQLite and restore it after page/server/browser restarts on the same machine.
 - Generate a grounded channel-wide summary across indexed videos.
 - Run RAG without live transcript requests by setting `RAG_TEST_MODE=true`.
 
@@ -525,6 +526,7 @@ frontend/
 
 tests/
   test_llm_fallback.py
+  test_chat_persistence.py
 
 data/
   youtube_analyzer.db
@@ -540,7 +542,7 @@ rag_evaluation.py
 
 - `backend/main.py` - FastAPI routes and overall application flow.
 - `backend/youtube_service.py` - YouTube Data API communication and channel-input resolution.
-- `backend/database_service.py` - SQLite caching for channels, videos, and full/raw transcripts.
+- `backend/database_service.py` - SQLite caching for channels, videos, full/raw transcripts, and persisted chatbot sessions.
 - `backend/analytics_service.py` - Statistics calculations with pandas.
 - `backend/transcript_service.py` - Reuses SQLite transcripts before requesting missing transcripts from YouTube.
 - `backend/rag_service.py` - Chroma indexing, retrieval, RAG prompt preparation, and source handling.
@@ -555,7 +557,7 @@ rag_evaluation.py
 ## Data Storage and Security Notes
 
 - API keys are configured through `.env` and should not be committed to source control.
-- Channel/video metadata and raw transcripts are cached locally in SQLite.
+- Channel/video metadata, raw transcripts, and recent chatbot history are stored locally in SQLite.
 - RAG transcript chunks and embeddings are stored locally in Chroma.
 - Retrieved transcript context is sent to Gemini when generating an AI response or channel summary.
 - The current application analyzes one channel at a time and does not include user accounts.
@@ -571,5 +573,3 @@ rag_evaluation.py
 | Chroma | Practical capacity depends on local disk space, memory, and processing performance. | Large transcript collections can increase storage use and retrieval/indexing time. | Reuse persistent collections, prevent duplicate indexing, store metadata, and use persistent storage when deployed. |
 | SQLite | SQLite has limited concurrent-write scalability compared with server databases such as PostgreSQL. | It may become a bottleneck if many users write channel/transcript data concurrently in a production deployment. | Use SQLite for local caching and preprocessing. A production version could replace the database service with PostgreSQL without changing the overall RAG architecture. |
 
-## Future Implementations
-Persistent Chat History - Storing chatbot conversations in SQLite and tying them to channel_id so users can resume conversation after refreshing the page or a restart

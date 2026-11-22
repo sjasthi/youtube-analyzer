@@ -103,6 +103,22 @@ def initialize_database():
 
             CREATE INDEX IF NOT EXISTS idx_transcripts_channel_id
                 ON transcripts(channel_id);
+
+            -- Persists chatbot conversation state so follow-up context survives
+            -- page reloads, browser restarts, and FastAPI restarts.
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                session_id TEXT PRIMARY KEY,
+                channel_id TEXT NOT NULL,
+                messages_json TEXT NOT NULL DEFAULT '[]',
+                target_video_ids_json TEXT NOT NULL DEFAULT '[]',
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_chat_sessions_channel_id
+                ON chat_sessions(channel_id);
+
+            CREATE INDEX IF NOT EXISTS idx_chat_sessions_updated_at
+                ON chat_sessions(updated_at);
             """
         )
 
@@ -480,3 +496,79 @@ def get_saved_transcript_with_video(video_id):
         ).fetchone()
 
     return dict(row) if row is not None else None
+
+def save_chat_session(session_id, channel_id, messages, target_video_ids, updated_at=None):
+    """Persist one chatbot session in SQLite."""
+    timestamp = updated_at or datetime.now(timezone.utc).isoformat()
+    messages_json = json.dumps(messages or [], ensure_ascii=False)
+    target_ids_json = json.dumps(target_video_ids or [], ensure_ascii=False)
+
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO chat_sessions (
+                session_id, channel_id, messages_json, target_video_ids_json, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(session_id) DO UPDATE SET
+                channel_id = excluded.channel_id,
+                messages_json = excluded.messages_json,
+                target_video_ids_json = excluded.target_video_ids_json,
+                updated_at = excluded.updated_at
+            """,
+            (session_id, channel_id, messages_json, target_ids_json, timestamp),
+        )
+        connection.execute(
+            """
+            DELETE FROM chat_sessions
+            WHERE session_id NOT IN (
+                SELECT session_id
+                FROM chat_sessions
+                ORDER BY updated_at DESC
+                LIMIT 100
+            )
+            """
+        )
+
+
+def get_saved_chat_session(session_id):
+    """Return a persisted chatbot session, or None when it does not exist."""
+    with get_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT session_id, channel_id, messages_json, target_video_ids_json, updated_at
+            FROM chat_sessions
+            WHERE session_id = ?
+            """,
+            (session_id,),
+        ).fetchone()
+
+    if row is None:
+        return None
+
+    try:
+        messages = json.loads(row["messages_json"] or "[]")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        messages = []
+    try:
+        target_video_ids = json.loads(row["target_video_ids_json"] or "[]")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        target_video_ids = []
+
+    return {
+        "session_id": row["session_id"],
+        "channel_id": row["channel_id"],
+        "messages": messages if isinstance(messages, list) else [],
+        "target_video_ids": target_video_ids if isinstance(target_video_ids, list) else [],
+        "updated_at": row["updated_at"],
+    }
+
+
+def delete_saved_chat_session(session_id):
+    """Delete a persisted chatbot session."""
+    with get_connection() as connection:
+        connection.execute(
+            "DELETE FROM chat_sessions WHERE session_id = ?",
+            (session_id,),
+        )
+
