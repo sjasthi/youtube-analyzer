@@ -571,3 +571,5 @@ rag_evaluation.py
 | Chroma | Practical capacity depends on local disk space, memory, and processing performance. | Large transcript collections can increase storage use and retrieval/indexing time. | Reuse persistent collections, prevent duplicate indexing, store metadata, and use persistent storage when deployed. |
 | SQLite | SQLite has limited concurrent-write scalability compared with server databases such as PostgreSQL. | It may become a bottleneck if many users write channel/transcript data concurrently in a production deployment. | Use SQLite for local caching and preprocessing. A production version could replace the database service with PostgreSQL without changing the overall RAG architecture. |
 
+## Future Implementations
+Persistent Chat History - Storing chatbot conversations in SQLite and tying them to channel_id so users can resume conversation after refreshing the page or a restart
