@@ -865,6 +865,17 @@ body.modal-open { overflow: hidden; }
     font-size: 0.875rem;
 }
 
+.channel-summary-sources a {
+    color: var(--link);
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.channel-summary-sources a:hover,
+.channel-summary-sources a:focus {
+    text-decoration: underline;
+}
+
 /* Spacing for Channel Summary saved status and generation date */
 #channelSummarySavedStatus {
     margin: 6px 0;
