@@ -1028,7 +1028,7 @@ async function askQuestion() {
 }
 
 
-function displayChannelSummary(data) {
+function displayChannelSummary(data, showGenerationWarning = true) {
     const indexedCount = Number(data.indexed_video_count || 0);
     const chunkCount = Number(data.representative_chunk_count || 0);
 
@@ -1081,9 +1081,9 @@ function displayChannelSummary(data) {
 
     channelSummaryResult.classList.remove("hidden");
     copyChannelSummaryButton.classList.remove("hidden");
-
-    if (data.generation_warning) {
-        channelSummaryStatus.textContent += ` Warning: ${data.generation_warning}`;
+    
+    if (showGenerationWarning && data.generation_warning) {
+        channelSummaryStatus.textContent += `\n\nWarning: ${data.generation_warning}`;
     }
 }
 
@@ -1103,7 +1103,7 @@ async function loadChannelSummary() {
         }
 
         if (data.exists && data.summary_data) {
-            displayChannelSummary(data.summary_data);
+            displayChannelSummary(data.summary_data, false);
         } else {
             channelSummarySavedStatus.textContent = "Not Yet Generated";
             channelSummarySavedStatus.className = "status-badge status-missing";

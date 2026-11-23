@@ -821,6 +821,7 @@ body.modal-open { overflow: hidden; }
 .channel-summary-status {
     margin: 8px 0 14px;
     line-height: 1.45;
+    white-space: pre-line;
 }
 
 .channel-summary-result {
