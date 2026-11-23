@@ -70,6 +70,8 @@ const channelSummaryStatus = document.getElementById("channelSummaryStatus");
 const channelSummaryResult = document.getElementById("channelSummaryResult");
 const channelSummaryText = document.getElementById("channelSummaryText");
 const channelSummarySourceList = document.getElementById("channelSummarySourceList");
+const channelSummarySavedStatus = document.getElementById("channelSummarySavedStatus");
+const channelSummaryLastGenerated = document.getElementById("channelSummaryLastGenerated");
 
 // Transcript modal elements
 const copyTranscriptModalButton = document.getElementById("copyTranscriptModalButton");
@@ -654,6 +656,9 @@ async function analyzeChannel() {
     channelSummarySourceList.innerHTML = "";
     channelSummaryStatus.textContent = "Index RAG content first, then generate a channel-wide summary.";
     copyChannelSummaryButton.classList.add("hidden");
+    channelSummarySavedStatus.textContent = "";
+    channelSummaryLastGenerated.textContent = "";
+    generateChannelSummaryButton.textContent = "Generate Channel Summary";
     transcriptStatus.textContent = "";
     transcriptStatus.className = "transcript-status hidden";
 
@@ -711,6 +716,7 @@ async function analyzeChannel() {
         questionSection.classList.remove("hidden");
         channelSummarySection.classList.remove("hidden");
         await refreshRagCoverage();
+        await loadChannelSummary();
         startVideoStatusPolling();
 
     } catch (error) {
@@ -1022,6 +1028,96 @@ async function askQuestion() {
 }
 
 
+function displayChannelSummary(data) {
+    const indexedCount = Number(data.indexed_video_count || 0);
+    const chunkCount = Number(data.representative_chunk_count || 0);
+
+    channelSummaryText.textContent = data.summary || "No summary was returned.";
+
+    channelSummaryStatus.textContent =
+        `Summarized ${indexedCount} indexed video${indexedCount === 1 ? "" : "s"} using ${chunkCount} representative transcript chunk${chunkCount === 1 ? "" : "s"}.`;
+
+    // Shows that a previously generated summary is available
+    channelSummarySavedStatus.textContent = "Previously Generated";
+    channelSummarySavedStatus.className = "status-badge status-success";
+    generateChannelSummaryButton.textContent = "Generate New Summary";
+    
+    // Displays the last successful generation date and time
+    if (data.generated_at) {
+        const generatedDate = new Date(data.generated_at);
+        channelSummaryLastGenerated.textContent =
+            `Last generated: ${generatedDate.toLocaleString()}`;
+    } else {
+        channelSummaryLastGenerated.textContent = "Last generated: Date unavailable";
+    }
+
+    channelSummarySourceList.innerHTML = "";
+
+    (data.sources || []).forEach(source => {
+        const item = document.createElement("li");
+        const link = document.createElement("a");
+
+        link.href = source.video_url ||
+            `https://www.youtube.com/watch?v=${encodeURIComponent(source.video_id || "")}`;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = source.title || source.video_id || "Unknown video";
+
+        item.appendChild(link);
+
+        const details = [];
+        if (source.published_at) details.push(formatDate(source.published_at));
+        if (source.language) details.push(source.language);
+
+        if (details.length) {
+            const meta = document.createElement("span");
+            meta.className = "channel-summary-source-meta muted";
+            meta.textContent = ` — ${details.join(" · ")}`;
+            item.appendChild(meta);
+        }
+
+        channelSummarySourceList.appendChild(item);
+    });
+
+    channelSummaryResult.classList.remove("hidden");
+    copyChannelSummaryButton.classList.remove("hidden");
+
+    if (data.generation_warning) {
+        channelSummaryStatus.textContent += ` Warning: ${data.generation_warning}`;
+    }
+}
+
+
+async function loadChannelSummary() {
+    if (!activeChannelId) return;
+
+    try {
+        const response = await fetch(
+            `/api/channel/${encodeURIComponent(activeChannelId)}/summary`
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.detail || "Unable to load saved channel summary.");
+        }
+
+        if (data.exists && data.summary_data) {
+            displayChannelSummary(data.summary_data);
+        } else {
+            channelSummarySavedStatus.textContent = "Not Yet Generated";
+            channelSummarySavedStatus.className = "status-badge status-missing";
+            channelSummaryLastGenerated.textContent = "Last generated: Never";
+            generateChannelSummaryButton.textContent = "Generate Channel Summary";
+        }
+
+    } catch (error) {
+        channelSummaryStatus.textContent =
+            `Unable to load saved channel summary: ${error.message}`;
+    }
+}
+
+
 // FP9: Generate a bounded channel-wide summary from existing Chroma content only.
 async function generateChannelSummary() {
     if (!activeChannelId) {
@@ -1031,8 +1127,6 @@ async function generateChannelSummary() {
 
     generateChannelSummaryButton.disabled = true;
     generateChannelSummaryButton.textContent = "Generating...";
-    copyChannelSummaryButton.classList.add("hidden");
-    channelSummaryResult.classList.add("hidden");
     channelSummaryStatus.textContent = "Summarizing indexed channel content. Larger channels may require several bounded Gemini calls...";
 
     try {
@@ -1042,44 +1136,24 @@ async function generateChannelSummary() {
         );
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || "Unable to generate channel summary.");
-
-        const indexedCount = Number(data.indexed_video_count || 0);
-        const chunkCount = Number(data.representative_chunk_count || 0);
-        channelSummaryText.textContent = data.summary || "No summary was returned.";
-        channelSummaryStatus.textContent = `Summarized ${indexedCount} indexed video${indexedCount === 1 ? "" : "s"} using ${chunkCount} representative transcript chunk${chunkCount === 1 ? "" : "s"}.`;
-
-        channelSummarySourceList.innerHTML = "";
-        (data.sources || []).forEach(source => {
-            const item = document.createElement("li");
-            const link = document.createElement("a");
-            link.href = source.video_url || `https://www.youtube.com/watch?v=${encodeURIComponent(source.video_id || "")}`;
-            link.target = "_blank";
-            link.rel = "noopener noreferrer";
-            link.textContent = source.title || source.video_id || "Unknown video";
-            item.appendChild(link);
-
-            const details = [];
-            if (source.published_at) details.push(formatDate(source.published_at));
-            if (source.language) details.push(source.language);
-            if (details.length) {
-                const meta = document.createElement("span");
-                meta.className = "channel-summary-source-meta muted";
-                meta.textContent = ` — ${details.join(" · ")}`;
-                item.appendChild(meta);
-            }
-            channelSummarySourceList.appendChild(item);
-        });
-
-        channelSummaryResult.classList.remove("hidden");
-        copyChannelSummaryButton.classList.remove("hidden");
-        if (data.generation_warning) {
-            channelSummaryStatus.textContent += ` Warning: ${data.generation_warning}`;
+        
+        if (data.saved === false) {
+            channelSummaryStatus.textContent =
+                data.generation_warning || data.summary ||
+                "Summary generation failed. Your previous saved summary was preserved.";
+            return;
         }
+            
+        displayChannelSummary(data);
+
     } catch (error) {
         channelSummaryStatus.textContent = `Unable to generate channel summary: ${error.message}`;
     } finally {
         generateChannelSummaryButton.disabled = false;
-        generateChannelSummaryButton.textContent = "Generate Channel Summary";
+        generateChannelSummaryButton.textContent =
+            channelSummarySavedStatus.textContent === "Previously Generated"
+                ? "Generate New Summary"
+                : "Generate Channel Summary";
     }
 }
 

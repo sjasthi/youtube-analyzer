@@ -809,6 +809,7 @@ body.modal-open { overflow: hidden; }
 .copy-video-link-button:hover {
     background: var(--surface-hover);
 }
+
 /* FP9 channel-wide summary. */
 .channel-summary-actions {
     display: flex;
@@ -861,4 +862,13 @@ body.modal-open { overflow: hidden; }
 
 .channel-summary-source-meta {
     font-size: 0.875rem;
+}
+
+/* Spacing for Channel Summary saved status and generation date */
+#channelSummarySavedStatus {
+    margin: 6px 0;
+}
+
+.channel-summary-last-generated {
+    margin: 14px 0;
 }

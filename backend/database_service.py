@@ -119,6 +119,23 @@ def initialize_database():
 
             CREATE INDEX IF NOT EXISTS idx_chat_sessions_updated_at
                 ON chat_sessions(updated_at);
+            
+            CREATE TABLE IF NOT EXISTS channel_summaries (
+                channel_id TEXT PRIMARY KEY,
+                summary TEXT NOT NULL,
+                sources_json TEXT NOT NULL DEFAULT '[]',
+                indexed_video_count INTEGER DEFAULT 0,
+                representative_chunk_count INTEGER DEFAULT 0,
+                summary_strategy TEXT,
+                generation_provider TEXT,
+                generation_model TEXT,
+                generation_warning TEXT,
+                summary_batch_count INTEGER DEFAULT 0,
+                generated_at TEXT NOT NULL,
+                FOREIGN KEY (channel_id)
+                    REFERENCES channels(channel_id)
+                    ON DELETE CASCADE
+            );
             """
         )
 
@@ -572,3 +589,84 @@ def delete_saved_chat_session(session_id):
             (session_id,),
         )
 
+
+def save_channel_summary(channel_id: str, summary_data: dict) -> dict:
+    """Saves or replaces the generated summary for one channel."""
+    clean_channel_id = channel_id.strip()
+
+    if not clean_channel_id:
+        raise ValueError("Channel ID is required to save a summary.")
+
+    generated_at = datetime.now(timezone.utc).isoformat()
+
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO channel_summaries (
+                channel_id,
+                summary,
+                sources_json,
+                indexed_video_count,
+                representative_chunk_count,
+                summary_strategy,
+                generation_provider,
+                generation_model,
+                generation_warning,
+                summary_batch_count,
+                generated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(channel_id) DO UPDATE SET
+                summary = excluded.summary,
+                sources_json = excluded.sources_json,
+                indexed_video_count = excluded.indexed_video_count,
+                representative_chunk_count = excluded.representative_chunk_count,
+                summary_strategy = excluded.summary_strategy,
+                generation_provider = excluded.generation_provider,
+                generation_model = excluded.generation_model,
+                generation_warning = excluded.generation_warning,
+                summary_batch_count = excluded.summary_batch_count,
+                generated_at = excluded.generated_at
+            """,
+            (
+                clean_channel_id,
+                summary_data.get("summary", ""),
+                json.dumps(summary_data.get("sources", []), ensure_ascii=False),
+                summary_data.get("indexed_video_count", 0),
+                summary_data.get("representative_chunk_count", 0),
+                summary_data.get("summary_strategy"),
+                summary_data.get("generation_provider"),
+                summary_data.get("generation_model"),
+                summary_data.get("generation_warning"),
+                summary_data.get("summary_batch_count", 0),
+                generated_at,
+            ),
+        )
+
+    return get_channel_summary(clean_channel_id)
+
+
+def get_channel_summary(channel_id: str) -> dict | None:
+    """Returns the saved summary for one channel, if available."""
+    clean_channel_id = channel_id.strip()
+
+    if not clean_channel_id:
+        return None
+
+    with get_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT *
+            FROM channel_summaries
+            WHERE channel_id = ?
+            """,
+            (clean_channel_id,),
+        ).fetchone()
+
+    if row is None:
+        return None
+
+    summary = dict(row)
+    summary["sources"] = json.loads(summary.pop("sources_json") or "[]")
+
+    return summary

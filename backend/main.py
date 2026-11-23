@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from backend.analytics_service import calculate_analytics
 from backend.database_service import (
     get_cached_channel_data,
+    get_channel_summary,
     get_database_stats,
     get_saved_transcripts_for_channel,
     get_saved_transcript,
@@ -25,6 +26,7 @@ from backend.database_service import (
     initialize_database,
     is_cache_fresh,
     save_channel_and_videos,
+    save_channel_summary,
     save_chat_session,
     delete_saved_chat_session,
 )
@@ -1528,6 +1530,23 @@ def index_rag_content(request: RagIndexRequest):
     }
 
 
+@app.get("/api/channel/{channel_id}/summary")
+def get_saved_channel_summary(channel_id: str):
+    """Returns the previously saved summary for a channel."""
+    clean_channel_id = str(channel_id or "").strip()
+
+    if not clean_channel_id:
+        raise HTTPException(status_code=400, detail="Channel ID is required.")
+
+    saved_summary = get_channel_summary(clean_channel_id)
+
+    return {
+        "exists": saved_summary is not None,
+        "channel_id": clean_channel_id,
+        "summary_data": saved_summary,
+    }
+
+
 @app.post("/api/channel/{channel_id}/summary")
 def channel_summary(channel_id: str):
     """Generate a Chroma-only summary across all indexed videos for a channel."""
@@ -1558,15 +1577,34 @@ def channel_summary(channel_id: str):
 
     try:
         result = summarize_channel(rag_channel_id)
+
+        # Does not replace an existing summary if generation failed
+        if result.get("summary_strategy") in {
+            "generation_failed",
+            "generation_unavailable",
+            "no_evidence",
+        }:
+            return {
+                **result,
+                "channel_id": clean_channel_id,
+                "rag_storage": "chroma",
+                "rag_test_mode": RAG_TEST_MODE,
+                "transcript_request_made": False,
+                "saved": False,
+            }
+        
+        saved_summary = save_channel_summary(clean_channel_id, result)
+    
     except (RuntimeError, ValueError) as error:
         raise HTTPException(status_code=500, detail=str(error))
 
     return {
-        **result,
+        **saved_summary,
         "channel_id": clean_channel_id,
         "rag_storage": "chroma",
         "rag_test_mode": RAG_TEST_MODE,
         "transcript_request_made": False,
+        "saved": True,
     }
 
 

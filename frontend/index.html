@@ -168,6 +168,8 @@
             </button>
             <div id="channelSummaryContent" class="collapsible-content">
                 <p class="note">Generate a grounded summary across all videos currently indexed in Chroma. This does not retrieve new transcripts from YouTube.</p>
+                <div id = "channelSummarySavedStatus" class = "status-badge status-neutral" role = "status" aria-live = "polite"></div>
+                <div id = "channelSummaryLastGenerated" class = "channel-summary-last-generated muted"></div>
                 <div class="channel-summary-actions">
                     <button id="generateChannelSummaryButton" type="button">Generate Channel Summary</button>
                     <button id="copyChannelSummaryButton" type="button" class="secondary-button hidden">Copy Summary</button>
